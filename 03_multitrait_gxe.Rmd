@@ -17,7 +17,7 @@ params:
   run_mt: true                  # multi-trait MCMC (Part A); false = GxE only
   gxe_traits: ["MY", "NUE"]
   gxe_sommer_models: ["M1_main", "M2_CS"]   # add "M3_DIAG", "M4_US", "M5_FA" on a cluster
-  gxe_reml_iter: 100            # raised from 30 on 7 Nov 2026 (my choice): 30 did not converge for M2_CS
+  gxe_reml_iter: 100            # raised from 30 on 7 Nov 2026: 30 did not converge for M2_CS
   seed: 20261102
 ---
 

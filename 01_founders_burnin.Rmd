@@ -33,7 +33,7 @@ t0 <- Sys.time()
    doi:10.1093/molbev/mst125), extended to **three breeds** that split from a common
    ancestral population.
 2. Sets global simulation parameters: 29 autosomes (the bovine autosome number), **about 10,000 SNPs**
-   (345 per chromosome; my choice 8 Nov 2026, so the run fits this machine; the 50k version is kept in hpc/ for the cluster),
+   (345 per chromosome, so the run fits this machine; the 50k version is kept in hpc/ for the cluster),
    10 genetically correlated traits with breed-specific heritabilities from `00_genetic_parameters.Rmd`.
 3. Builds the 28,400-cow CFIT structure (Lassen & Borchersen, CFIT slides; file 00): breed x country cows and 40 single-breed herds, and a recorded pedigree.
 4. Runs a **phenotypic burn-in** (conventional selection) before genomic selection starts in file 04.
@@ -67,7 +67,7 @@ design <- list(
   scale               = if (FULL) 1 else 0.05,    # TEST mode = 5% of 28,400 cows
   n_chr               = 29,                       # bovine autosomes (7 Nov 2026; was 10)
   seg_sites_per_chr   = 2500,                     # candidate segregating sites kept per chr (>= SNP + QTL)
-  snp_per_chr         = 345,                      # 29 x 345 = 10,005 SNP (my choice 8 Nov 2026; 50k planned for the cluster; was 10 x 500)
+  snp_per_chr         = 345,                      # 29 x 345 = 10,005 SNP (50k planned for the cluster; was 10 x 500)
   qtl_per_chr         = 100,                      # 2,900 QTL per trait, non-overlapping with SNP
   split_gen_HOL_RDC   = 30,                       # generations ago, HOL and RDC lineages join
   split_gen_JER       = 50,                       # generations ago, JER joins the others
@@ -81,7 +81,7 @@ kable(data.table(parameter = names(design),
                  value = sapply(design, function(x) paste(x, collapse = " / ")),
                  basis = c("compute budget", "compute budget", "compute budget", "brief",
                            "choice", "assumption: breed formation ~ 19th century (not a published estimate)",
-                           "assumption (as above)", "CFIT: 39 farms (12 RDC, 11 JER, 16 HOL) scaled to 40, largest remainder (file 00; my choice)",
+                           "assumption (as above)", "CFIT: 39 farms (12 RDC, 11 JER, 16 HOL) scaled to 40, largest remainder (file 00)",
                            "assumption; herd fitted as fixed block downstream",
                            "choice", "assumption: 1 sire per 200 cows (no public sire numbers found)", "assumption")))
 n_breed <- split[, .(n = sum(n)), by = breed]
@@ -201,8 +201,7 @@ With a published between-breed F~ST~, the split times can be tuned to match it.
 # Population structure, blocking and phenotypes
 
 Each cow belongs to a **breed** (factor), a **country** (factor) and a **herd** (block nested
-in breed x country). Since 7 Nov 2026 herds are **single-breed**, as on the CFIT farms (my
-choice; 40 herds, file 00), and cows go to countries in the CFIT proportions of their breed. Herd effects are redrawn every generation
+in breed x country). Since 7 Nov 2026 herds are **single-breed**, as on the CFIT farms (40 herds, file 00), and cows go to countries in the CFIT proportions of their breed. Herd effects are redrawn every generation
 (herd-generation). Phenotype = genetic value for the cow's country + herd effect + residual.
 Residual variance is set **per breed** so that h^2^ in the base generation equals the
 breed-specific value from file 00.

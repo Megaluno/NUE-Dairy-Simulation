@@ -87,7 +87,7 @@ sign reversals (Fertility and Udder health/Mastitis reversed into ICF and SCS).
 ```{r sf_sources}
 n_breed <- sp_new[, .(n = sum(n)), by = breed][, setNames(n, breed)]
 w <- function(h, r, j) sum(n_breed[c("HOL", "RDC", "JER")] * c(h, r, j)) / sum(n_breed)
-# the NAV Yield index correlation is applied to both MY and PY (my choice, 7 Nov 2026)
+# the NAV Yield index correlation is applied to both MY and PY
 sf <- data.table(pair = c("MY-SF", "PY-SF", "ICF-SF", "SCS-SF", "LONG-SF"), sign = c(1, 1, -1, -1, 1),
   NAV2026_HOL = c(0.32, 0.32, -0.06, -0.11, -0.02), NAV2026_RDC = c(0.13, 0.13, 0.06, 0.00, 0.15), NAV2026_JER = c(0.35, 0.35, -0.17, -0.08, -0.08),
   Steph2025_HOL = c(0.26, 0.26, -0.02, -0.11, 0.01), Steph2025_RDC = c(0.07, 0.07, 0.12, 0.06, 0.17), Steph2025_JER = c(0.23, 0.23, -0.14, -0.11, -0.09))

@@ -509,8 +509,7 @@ Nov 2026) with the previous one (archived in
 2026), so every change is visible before files 01-05 are re-run. The
 previous version of this file (resilience QR vs MA and Saved Feed as raw
 vs production-corrected DMI, 4 Nov) is in the same archive folder.</p>
-<p>Changes made on 7 Nov 2026, all by my decision or by my
-choice:</p>
+<p>Changes made on 7 Nov 2026, all by my decision:</p>
 <ol style="list-style-type: decimal">
 <li>Feeding rate (FR) is replaced by <strong>Saved Feed (SF)</strong>;
 DMI is dropped; ECM and body weight are not added as traits.</li>
@@ -1077,7 +1076,7 @@ matters, with the same CFIT cow weights and the same sign reversals
 (Fertility and Udder health/Mastitis reversed into ICF and SCS).</p>
 <pre class="r"><code>n_breed &lt;- sp_new[, .(n = sum(n)), by = breed][, setNames(n, breed)]
 w &lt;- function(h, r, j) sum(n_breed[c(&quot;HOL&quot;, &quot;RDC&quot;, &quot;JER&quot;)] * c(h, r, j)) / sum(n_breed)
-# the NAV Yield index correlation is applied to both MY and PY (my choice, 7 Nov 2026)
+# the NAV Yield index correlation is applied to both MY and PY
 sf &lt;- data.table(pair = c(&quot;MY-SF&quot;, &quot;PY-SF&quot;, &quot;ICF-SF&quot;, &quot;SCS-SF&quot;, &quot;LONG-SF&quot;), sign = c(1, 1, -1, -1, 1),
   NAV2026_HOL = c(0.32, 0.32, -0.06, -0.11, -0.02), NAV2026_RDC = c(0.13, 0.13, 0.06, 0.00, 0.15), NAV2026_JER = c(0.35, 0.35, -0.17, -0.08, -0.08),
   Steph2025_HOL = c(0.26, 0.26, -0.02, -0.11, 0.01), Steph2025_RDC = c(0.07, 0.07, 0.12, 0.06, 0.17), Steph2025_JER = c(0.23, 0.23, -0.14, -0.11, -0.09))

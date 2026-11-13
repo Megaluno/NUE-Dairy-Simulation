@@ -1619,8 +1619,7 @@ AlphaSimR), using AlphaSimR’s built-in <strong>CATTLE</strong>
 demographic history (MacLeod et al. 2013, <em>Mol Biol Evol</em>, <a href="doi:10.1093/molbev/mst125" class="uri">doi:10.1093/molbev/mst125</a>), extended to <strong>three
 breeds</strong> that split from a common ancestral population.</li>
 <li>Sets global simulation parameters: 29 autosomes (the bovine autosome
-number), <strong>about 10,000 SNPs</strong> (345 per chromosome; my
-choice 8 Nov 2026, so the run fits this machine; the 50k version is kept
+number), <strong>about 10,000 SNPs</strong> (345 per chromosome, so the run fits this machine; the 50k version is kept
 in hpc/ for the cluster), 10 genetically correlated traits with
 breed-specific heritabilities from
 <code>00_genetic_parameters.Rmd</code>.</li>
@@ -1757,7 +1756,7 @@ design &lt;- list(
   scale               = if (FULL) 1 else 0.05,    # TEST mode = 5% of 28,400 cows
   n_chr               = 29,                       # bovine autosomes (7 Nov 2026; was 10)
   seg_sites_per_chr   = 2500,                     # candidate segregating sites kept per chr (&gt;= SNP + QTL)
-  snp_per_chr         = 345,                      # 29 x 345 = 10,005 SNP (my choice 8 Nov 2026; 50k planned for the cluster; was 10 x 500)
+  snp_per_chr         = 345,                      # 29 x 345 = 10,005 SNP (50k planned for the cluster; was 10 x 500)
   qtl_per_chr         = 100,                      # 2,900 QTL per trait, non-overlapping with SNP
   split_gen_HOL_RDC   = 30,                       # generations ago, HOL and RDC lineages join
   split_gen_JER       = 50,                       # generations ago, JER joins the others
@@ -1771,7 +1770,7 @@ kable(data.table(parameter = names(design),
                  value = sapply(design, function(x) paste(x, collapse = &quot; / &quot;)),
                  basis = c(&quot;compute budget&quot;, &quot;compute budget&quot;, &quot;compute budget&quot;, &quot;brief&quot;,
                            &quot;choice&quot;, &quot;assumption: breed formation ~ 19th century (not a published estimate)&quot;,
-                           &quot;assumption (as above)&quot;, &quot;CFIT: 39 farms (12 RDC, 11 JER, 16 HOL) scaled to 40, largest remainder (file 00; my choice)&quot;,
+                           &quot;assumption (as above)&quot;, &quot;CFIT: 39 farms (12 RDC, 11 JER, 16 HOL) scaled to 40, largest remainder (file 00)&quot;,
                            &quot;assumption; herd fitted as fixed block downstream&quot;,
                            &quot;choice&quot;, &quot;assumption: 1 sire per 200 cows (no public sire numbers found)&quot;, &quot;assumption&quot;)))</code></pre>
 <table>
@@ -1828,7 +1827,7 @@ published estimate)</td>
 <td align="left">split_gen_JER</td>
 <td align="left">50</td>
 <td align="left">CFIT: 39 farms (12 RDC, 11 JER, 16 HOL) scaled to 40,
-largest remainder (file 00; my choice)</td>
+largest remainder (file 00)</td>
 </tr>
 <tr class="odd">
 <td align="left">herds</td>
@@ -2011,7 +2010,7 @@ blocking and phenotypes</h1>
 <p>Each cow belongs to a <strong>breed</strong> (factor), a
 <strong>country</strong> (factor) and a <strong>herd</strong> (block
 nested in breed x country). Since 7 Nov 2026 herds are
-<strong>single-breed</strong>, as on the CFIT farms (my choice; 40
+<strong>single-breed</strong>, as on the CFIT farms (40
 herds, file 00), and cows go to countries in the CFIT proportions of
 their breed. Herd effects are redrawn every generation
 (herd-generation). Phenotype = genetic value for the cow’s country +

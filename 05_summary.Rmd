@@ -45,7 +45,7 @@ its genomes and its phenotypes are simulated, so results show what the *design* 
 not what real Nordic data would show. Units are **genetic standard deviations of the founder
 population** unless stated. GS_NTM, GS_NTM_NUE35, GS_NTM_NUE75, GS_NTM_NUE35_MUN, the methane scenario (`r ch4_sc`) and
 GS_NTM_NUE35_OCS_dF1 were run with up to **`r params$n_rep` replicates, each from its own independent
-coalescent founder population and burn-in** (7 Nov 2026, my choice); PHENO and GS_NTM_NUE35_MATE
+coalescent founder population and burn-in**; PHENO and GS_NTM_NUE35_MATE
 once (replicate 0). Within a replicate all scenarios share the founders, burn-in and random-number
 stream, so scenario differences are paired. Only the replicate section tests whether a difference
 between programmes is consistent; single-run differences in the earlier tables are indicative only.
@@ -480,7 +480,7 @@ Every NUE correlation was multiplied by s = 0 and s = 0.5 (file 00; s = 1 is the
 founders, burn-ins and the GS_NTM and GS_NTM_NUE35 programmes were run for each level (up to
 `r params$n_sens_rep` replicates per level). s = 0 means NUE is genetically unrelated to every other trait.
 A third set uses the heritability of the NAV Saved Feed index itself, 0.08 (Lidauer et al., NAV workshop
-2026), instead of 0.23 (ReFI) (my choice, 7 Nov 2026).
+2026), instead of 0.23 (ReFI).
 
 ```{r sensitivity, results="asis"}
 sens_dir <- function(set, r) paste0(params$base_dir, if (set == "main") "" else paste0("_", set), if (r == 0) "" else paste0("_rep", r))
