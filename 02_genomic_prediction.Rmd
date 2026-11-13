@@ -1,7 +1,7 @@
 ---
 title: "02 - Dosage matrix, G/A/H kernels, and cross-validated genomic prediction"
 subtitle: "ABLUP-REML, GBLUP, ssGBLUP, weighted ssGBLUP, rrBLUP, BayesA, BayesB"
-author: "Prepared for Emmanuel Ismaila"
+author: "Prepared by Emmanuel Ismaila for QGG, Aarhus University"
 date: "`r Sys.Date()`"
 output:
   html_document:

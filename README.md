@@ -214,7 +214,7 @@ The recommendation to add an NUE weight does not depend on the uncertain NUE cor
 - CH4 parameters from Danish Holstein are applied to all breeds.
 - NTM cost estimates of the MUN weight and of optimum contribution selection do not pass correction for multiple testing; more replicates are needed.
 
-The full list of assumptions and the verification log (23 entries of bugs found, fixes and checks) are in [`docs/pipeline_notes_and_verification_log.md`](docs/pipeline_notes_and_verification_log.md).
+The full list of assumptions and the verification log (24 entries of bugs found, fixes and checks) are in [`docs/pipeline_notes_and_verification_log.md`](docs/pipeline_notes_and_verification_log.md).
 
 **What real data would add.** Genetic correlations of NUE with production, feed efficiency, health, fertility and resilience in Nordic breeds; whether they change across lactation and parity; and GxE estimated on the full population. The pipeline reads all parameters from `params/`, so real estimates can replace the literature values directly.
 

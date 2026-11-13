@@ -65,7 +65,7 @@ P = {
  "Buch2011": ("Buch, Sorensen, Lassen, Berg, Jakobsen, Johansson & Sorensen 2011. J Anim Breed Genet 128:174-182", "10.1111/j.1439-0388.2010.00904.x", "Swedish Red, first parity, ~624,000 cows", "Yes (Swedish)", "uploaded PDF (4 Nov)", "REML rg: PY-SCS 0.22 (0.017), PY-CFI 0.30 (0.025), SCS-CFI 0.15 (0.038), Table 4 (= PubMed 21554411)"),
  "Muuttoranta2019": ("Muuttoranta et al. 2019. J Dairy Sci 102:8184-8196", "10.3168/jds.2018-15858", "Swedish Holstein, Nordic Red", "Yes", "uploaded PDF (4 Nov)", "fertility traits across parities only; no pair with yield or udder health"),
  "Elgersma2018": ("Fluctuations in milk yield are heritable and can be used as a resilience indicator to breed healthy cows (Elgersma et al., J Dairy Sci 2018)", "10.3168/jds.2017-13270", "Dutch Holstein", "No (Netherlands)", "via Oloo et al. 2023 review table (JDS blocked)", "LnSD with udder health -0.36, longevity -0.30, calving interval -0.22; older than Poppe 2020 -> not used (recent over old)"),
- "Poppe2021": ("Genetic analysis of resilience indicators based on milk yield records in different lactations and at different lactation stages (Poppe et al., J Dairy Sci 2021)", "10.3168/jds.2020-19245", "Dutch Holstein", "No (Netherlands)", "ranges only, via Oloo et al. 2023 review (PDF not available)", "LnVar with MY 0.48-0.69, fertility -0.25 to -0.35, longevity -0.04 to -0.18, udder health -0.21 to -0.33 (ranges over lactations); not used: your decision 4 Nov 2026 to keep Poppe 2020"),
+ "Poppe2021": ("Genetic analysis of resilience indicators based on milk yield records in different lactations and at different lactation stages (Poppe et al., J Dairy Sci 2021)", "10.3168/jds.2020-19245", "Dutch Holstein", "No (Netherlands)", "ranges only, via Oloo et al. 2023 review (PDF not available)", "LnVar with MY 0.48-0.69, fertility -0.25 to -0.35, longevity -0.04 to -0.18, udder health -0.21 to -0.33 (ranges over lactations); not used: my decision 4 Nov 2026 to keep Poppe 2020"),
  "Oloo2023": ("Oloo et al. 2023. Front Anim Sci 4:1254877 (review)", "10.3389/fanim.2023.1254877", "review (sub-Saharan Africa; cites Dutch data)", "No", "full text", "tabulates Elgersma 2018 and Poppe 2020/2021 resilience correlations; no new estimates. Its LnVar-DMI -0.54 to -0.66 are Poppe's PARTIAL correlations (adjusted for yield), not the plain 0.24 used here"),
  "Kasna2025": ("Kasna, Zavadilova & Vareka 2025. Animals 15:667", "10.3390/ani15050667", "Czech Holstein, 3,080 cows", "No (Czechia)", "PMC full text", "resilience h2 0.02-0.13; correlations with other traits only as sire RBV correlations in figures (no values) - not usable"),
  "Nousiainen2004": ("Evaluation of milk urea nitrogen as a diagnostic of protein feeding (J Dairy Sci 2004; PubMed 14762082)", "10.3168/jds.S0022-0302(04)73178-1", "meta-analysis of feeding trials", "-", "abstract (search)", "phenotypic MUN-diet relation; no genetic correlations"),
@@ -89,7 +89,7 @@ R = [
  ("MY","PY","0.86","","none","305-d yields","NAV2024","X","Yes","IN MODEL","NAV estimate already in model"),
  ("MY","DMI","0.64","0.35","none","ECM vs DMI (ECM proxy for MY)","Lidauer2023;Liinamo2012",A,"Yes","PASS","Nordic genetic correlation; rule 2 (recent over old) picks Lidauer 2023 over Liinamo 2012 (0.62, SE 0.32)"),
  ("PY","DMI","0.64","0.35","none","ECM vs DMI (no protein-yield estimate exists)","Lidauer2023;Liinamo2012",A,"Yes","PASS","same Nordic ECM estimate used for protein yield (proxy, flagged)"),
- ("MY","FR","0.21","","none","feeding rate vs milk energy","Cavani2022",A,"No","FAIL","your answer 4 Nov: European estimates only (USA dropped)"),
+ ("MY","FR","0.21","","none","feeding rate vs milk energy","Cavani2022",A,"No","FAIL","decision 4 Nov: European estimates only (USA dropped)"),
  ("PY","FR","0.21","","none","feeding rate vs milk energy","Cavani2022",A,"No","FAIL","European estimates only (USA dropped)"),
  ("MY","SCS","+0.18","0.05","flipped (MY vs udder health index -0.18)","EBV-based approximate rg","Chen2021",C,"No","FAIL","rule 1: C-tier and not Nordic (Belgium)"),
  ("PY","SCS","0.22","0.017","none","lactation SCS vs 305-d PY, first parity (Iran 0.11 dropped)","Buch2011;Kheirabadi2016","A","Yes","PASS","Nordic REML estimate, same trait definitions (tier A)"),
@@ -97,10 +97,10 @@ R = [
  ("PY","ICF","0.30","0.025","none","days calving to first insemination vs PY, first parity","Buch2011","A","Yes","PASS","Nordic REML estimate, same trait definitions (tier A)"),
  ("MY","LONG","-0.05","0.05","none","EBV-based approximate rg","Chen2021;Hu2021",C,"No","FAIL","rule 1: C-tier and not Nordic"),
  ("PY","LONG","+0.41","","flipped (culling vs PY -0.41)","1st-lactation culling vs 305-d PY","Holtsmark2008",A,"Yes","PASS","Nordic genetic correlation (Norwegian Red); culling used as inverse of longevity"),
- ("MY","LNVAR","0.64 (QR) / 0.62 (MA)","","none","MACE correlation","Poppe2020",C,"No","PASS","your exception for resilience (4 Nov); QR chosen over MA (00b_rg_update_check.html)"),
+ ("MY","LNVAR","0.64 (QR) / 0.62 (MA)","","none","MACE correlation","Poppe2020",C,"No","PASS","my exception for resilience (4 Nov); QR chosen over MA (00b_rg_update_check.html)"),
  ("PY","LNVAR","","","","","","-","-","NO ESTIMATE","no estimate in any source read"),
  ("MY","MUN","-0.10","","none","cow-number-weighted Danish HOL/JER/Red","Buitenhuis2023;Rzewuska2013","X","Yes","IN MODEL","rule 2: Danish (-0.10) over Polish (+0.24)"),
- ("PY","MUN","0.11","","none","MU vs protein % (proxy for PY), Danish HOL 0.16 / RDC 0.10 / JER 0.04, CFIT cow-weighted like MY-MUN","Buitenhuis2023;Rzewuska2013",A,"Yes","PASS","your answer 4 Nov: Danish protein % by breed; one matrix for all breeds, so weighted as MY-MUN (Polish PY 0.19 not used)"),
+ ("PY","MUN","0.11","","none","MU vs protein % (proxy for PY), Danish HOL 0.16 / RDC 0.10 / JER 0.04, CFIT cow-weighted like MY-MUN","Buitenhuis2023;Rzewuska2013",A,"Yes","PASS","decision 4 Nov: Danish protein % by breed; one matrix for all breeds, so weighted as MY-MUN (Polish PY 0.19 not used)"),
  ("MY","NUE","0.52","0.11","none","NUEtot","Tavernier2024;Chen2021","X","No","IN MODEL","rule 2: recent (Tavernier 2024) over old (Chen 2021, 0.47)"),
  ("PY","NUE","0.80","0.07","none","NUEtot","Tavernier2024;Chen2021","X","No","IN MODEL","rule 2: Tavernier 2024 over Chen 2021 (0.42)"),
  ("MY","CH4","0.33","0.09","none","CH4 concentration (sniffer)","Schneider2025","X","Yes","IN MODEL","Danish, same trait definition"),
@@ -148,10 +148,10 @@ wb = Workbook()
 # ---------- Summary ----------
 s = wb.active; s.title = "Summary"
 s["A1"] = "Genetic correlations for the 11-trait model: evidence and decisions (4 Nov 2026)"; s["A1"].font = TITLE
-s["A2"] = "Counts are formulas on the 'Trait pairs' sheet. Decisions apply the criteria sheet; PENDING waits for your answer to the questions sheet."; s["A2"].font = NOTE
+s["A2"] = "Counts are formulas on the 'Trait pairs' sheet. Decisions apply the criteria sheet; PENDING waits for a decision on the questions sheet."; s["A2"].font = NOTE
 header(s, 4, ["Decision", "Number of pairs", "Meaning"])
 meaning = {"IN MODEL": "already in the simulation matrix (kept)", "PASS": "new value, passes the criteria",
-           "FAIL": "candidate exists but fails a criterion", "PENDING": "needs your decision",
+           "FAIL": "candidate exists but fails a criterion", "PENDING": "needs my decision",
            "NO ESTIMATE": "no published estimate found in any source read"}
 last = 5 + len(R) - 1 + 1
 for i, d in enumerate(meaning, 5):
@@ -201,16 +201,16 @@ c = wb.create_sheet("Criteria")
 c["A1"] = "Filtering criteria, in the order applied"; c["A1"].font = TITLE
 header(c, 3, ["#", "Criterion", "Set by", "Effect"])
 crit = [
- (1, "Value must be read in the paper itself (table or abstract), not taken from a citation in another paper.", "Claude (project rule: no unverified values)", "Konig 2008 (cited by Rzewuska 2015) not used."),
- (2, "Evidence tier: A = REML/Bayes genetic correlation, same trait definition, Nordic (only Buch et al. 2011 qualifies); B = genetic correlation for a proxy trait or a non-Nordic population; C = approximate (EBV/index correlation or MACE, no or rough SE).", "Claude", "Grades every candidate; no candidate reached tier A."),
- (3, "C-tier values are used only if estimated in a Nordic breed.", "You (4 Nov, item 1)", "Bakke 2024 (Norwegian Red) passes; Chen 2021 (Belgium) and Poppe 2020 (Netherlands) fail: 11 values removed."),
- (4, "Where estimates conflict: Danish over Polish; recent over old.", "You (4 Nov, item 2)", "MY-MUN keeps Danish -0.10; MY/PY-NUE keep Tavernier 2024; MY-DMI uses Lidauer 2023 over Liinamo 2012."),
- (5, "A genetic correlation outranks an EBV/index correlation for the same pair.", "Claude (not contested)", "SCS-CH4 and ICF-CH4 use Zetouni 2018 rather than Bakke 2024."),
- (6, "Among equal-tier estimates of the same year, the smaller SE wins.", "Claude (not contested)", "DMI-CH4 uses Bakke (SE 0.10) over Chipondoro (SE 0.64)."),
- (7, "Signs converted to the model's direction when the source uses an index where high = good, or culling (inverse of longevity).", "Claude", "Marked 'flipped' in the Trait pairs sheet."),
- (8, "No value is invented: pairs with no published estimate stay at 0 and are listed as 'no estimate' until you decide.", "You (3 Nov: ask, don't assume)", "19 pairs."),
- (9, "Only European estimates are used for genuine (B-tier) genetic correlations; resilience (Poppe 2020, Dutch, C-tier) is a stated exception.", "You (4 Nov, answers 1-2)", "USA and Iran values dropped, including DMI-FR from the model."),
- (10, "The final matrix must be positive definite; if not, it is bent (Hayes & Hill 1981) and every changed value is reported.", "Claude (method already in file 00)", "Applied after your decisions."),
+ (1, "Value must be read in the paper itself (table or abstract), not taken from a citation in another paper.", "Author (project rule: no unverified values)", "Konig 2008 (cited by Rzewuska 2015) not used."),
+ (2, "Evidence tier: A = REML/Bayes genetic correlation, same trait definition, Nordic (only Buch et al. 2011 qualifies); B = genetic correlation for a proxy trait or a non-Nordic population; C = approximate (EBV/index correlation or MACE, no or rough SE).", "Author", "Grades every candidate; no candidate reached tier A."),
+ (3, "C-tier values are used only if estimated in a Nordic breed.", "Author (4 Nov, item 1)", "Bakke 2024 (Norwegian Red) passes; Chen 2021 (Belgium) and Poppe 2020 (Netherlands) fail: 11 values removed."),
+ (4, "Where estimates conflict: Danish over Polish; recent over old.", "Author (4 Nov, item 2)", "MY-MUN keeps Danish -0.10; MY/PY-NUE keep Tavernier 2024; MY-DMI uses Lidauer 2023 over Liinamo 2012."),
+ (5, "A genetic correlation outranks an EBV/index correlation for the same pair.", "Author", "SCS-CH4 and ICF-CH4 use Zetouni 2018 rather than Bakke 2024."),
+ (6, "Among equal-tier estimates of the same year, the smaller SE wins.", "Author", "DMI-CH4 uses Bakke (SE 0.10) over Chipondoro (SE 0.64)."),
+ (7, "Signs converted to the model's direction when the source uses an index where high = good, or culling (inverse of longevity).", "Author", "Marked 'flipped' in the Trait pairs sheet."),
+ (8, "No value is invented: pairs with no published estimate stay at 0 and are listed as 'no estimate' until decided.", "Author (3 Nov: no assumed values)", "19 pairs."),
+ (9, "Only European estimates are used for genuine (B-tier) genetic correlations; resilience (Poppe 2020, Dutch, C-tier) is a stated exception.", "Author (4 Nov, answers 1-2)", "USA and Iran values dropped, including DMI-FR from the model."),
+ (10, "The final matrix must be positive definite; if not, it is bent (Hayes & Hill 1981) and every changed value is reported.", "Author (method already in file 00)", "Applied after my decisions."),
 ]
 for i, row in enumerate(crit, 4):
     for j, x in enumerate(row, 1):

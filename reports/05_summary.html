@@ -9,9 +9,9 @@
 <meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
 
 
-<meta name="author" content="Prepared for Emmanuel Ismaila" />
+<meta name="author" content="Prepared by Emmanuel Ismaila for QGG, Aarhus University" />
 
-<meta name="date" content="2026-11-13" />
+<meta name="date" content="2026-11-14" />
 
 <title>05 - Summary: can genomic selection improve nitrogen use efficiency?</title>
 
@@ -1606,8 +1606,9 @@ border-radius: 0px;
 nitrogen use efficiency?</h1>
 <h3 class="subtitle">Holstein / Red Dairy Cattle / Jersey in Denmark,
 Sweden, Finland and Germany (simulation)</h3>
-<h4 class="author">Prepared for Emmanuel Ismaila</h4>
-<h4 class="date">2026-11-13</h4>
+<h4 class="author">Prepared by Emmanuel Ismaila for QGG, Aarhus
+University</h4>
+<h4 class="date">2026-11-14</h4>
 
 </div>
 
@@ -1625,7 +1626,7 @@ deviations of the founder population</strong> unless stated. GS_NTM,
 GS_NTM_NUE35, GS_NTM_NUE75, GS_NTM_NUE35_MUN, the methane scenario
 (GS_NTM_NUE75_CH4) and GS_NTM_NUE35_OCS_dF1 were run with up to
 <strong>10 replicates, each from its own independent coalescent founder
-population and burn-in</strong> (7 Nov 2026, your choice); PHENO and
+population and burn-in</strong> (7 Nov 2026, my choice); PHENO and
 GS_NTM_NUE35_MATE once (replicate 0). Within a replicate all scenarios
 share the founders, burn-in and random-number stream, so scenario
 differences are paired. Only the replicate section tests whether a
@@ -4889,7 +4890,7 @@ if (nrow(reps)) {
     pair_test(&quot;GS_NTM_NUE35_OCS_dF1&quot;, &quot;GS_NTM_NUE35&quot;, v))))
   pk(pt[, .(comparison, trait, breed, n, mean_diff, sd_diff, same_sign, p_paired)], digits = 4,
         caption = &quot;Table A (p-values only). Paired differences between scenarios (same seed within replicate); same_sign = replicates with the majority sign; paired t-test, uncorrected&quot;)
-  # 13 Nov 2026 (your request): correction for multiple testing. One family = all paired tests of this section.
+  # 13 Nov 2026 (my decision): correction for multiple testing. One family = all paired tests of this section.
   # EUR is NTM times a constant per breed (the same test), so it is not counted twice and takes the NTM values.
   fam &lt;- pt[trait != &quot;EUR&quot; &amp; !is.na(p_paired)]
   fam[, `:=`(p_BH = p.adjust(p_paired, method = &quot;BH&quot;), p_Bonferroni = p.adjust(p_paired, method = &quot;bonferroni&quot;))]
@@ -8853,8 +8854,8 @@ do the conclusions rest on the NUE correlations?</h1>
 GS_NTM_NUE35 programmes were run for each level (up to 5 replicates per
 level). s = 0 means NUE is genetically unrelated to every other trait. A
 third set uses the heritability of the NAV Saved Feed index itself, 0.08
-(Lidauer et al., NAV workshop 2026), instead of 0.23 (ReFI) (your
-choice, 7 Nov 2026).</p>
+(Lidauer et al., NAV workshop 2026), instead of 0.23 (ReFI) (my choice,
+7 Nov 2026).</p>
 <pre class="r"><code>sens_dir &lt;- function(set, r) paste0(params$base_dir, if (set == &quot;main&quot;) &quot;&quot; else paste0(&quot;_&quot;, set), if (r == 0) &quot;&quot; else paste0(&quot;_rep&quot;, r))
 sens &lt;- rbindlist(lapply(c(&quot;NUEx0&quot;, &quot;NUEx05&quot;, &quot;SFh008&quot;, &quot;main&quot;), function(set) rbindlist(lapply(0:(params$n_sens_rep - 1), function(r)
   rbindlist(lapply(c(&quot;GS_NTM&quot;, &quot;GS_NTM_NUE35&quot;), function(s) {

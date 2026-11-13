@@ -1,6 +1,6 @@
 ---
 title: "04b - Evaluation model test inside the breeding programme: SNP-BLUP vs ssGBLUP"
-author: "Prepared for Emmanuel Ismaila"
+author: "Prepared by Emmanuel Ismaila for QGG, Aarhus University"
 date: "`r Sys.Date()`"
 output:
   html_document:
@@ -20,11 +20,11 @@ library(data.table); library(knitr)
 
 # Question and decision rule
 
-You asked (7 Nov 2026): run SNP-BLUP and ssGBLUP on the same 2 replicates of `r params$scenario`,
+Aim (7 Nov 2026): run SNP-BLUP and ssGBLUP on the same 2 replicates of `r params$scenario`,
 compare genetic response (NTM, NUE) and run time, and use the winner for all 20-replicate runs:
 "higher response without demanding much larger run time".
 
-**Rule (fixed before the runs; my operationalisation of your wording):** ssGBLUP is used for all
+**Rule (fixed before the runs; operational form of the aim):** ssGBLUP is used for all
 runs only if **both**
 
 1. its mean response over the 2 replicates is higher than SNP-BLUP for NTM **and** not lower for NUE, and
@@ -86,7 +86,7 @@ fwrite(cbind(m, time_ratio_vs_SNPBLUP = c(1, ratio)[match(m$model, c("SNPBLUP", 
 * **Model used for all replicate runs: `r winner`** (written to `params/eval_model_choice.txt`).
 
 With only 2 replicates the response difference is not tested statistically; the rule above is a
-practical choice, as you asked, not a significance test.
+practical choice, by design, not a significance test.
 
 ```{r session}
 sessionInfo()

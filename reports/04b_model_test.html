@@ -9,7 +9,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
 
 
-<meta name="author" content="Prepared for Emmanuel Ismaila" />
+<meta name="author" content="Prepared by Emmanuel Ismaila for QGG, Aarhus University" />
 
 <meta name="date" content="2026-11-08" />
 
@@ -480,7 +480,7 @@ display: none;
 
 <h1 class="title toc-ignore">04b - Evaluation model test inside the
 breeding programme: SNP-BLUP vs ssGBLUP</h1>
-<h4 class="author">Prepared for Emmanuel Ismaila</h4>
+<h4 class="author">Prepared by Emmanuel Ismaila for QGG, Aarhus University</h4>
 <h4 class="date">2026-11-08</h4>
 
 </div>
@@ -494,11 +494,11 @@ breeding programme: SNP-BLUP vs ssGBLUP</h1>
 
 <div id="question-and-decision-rule" class="section level1">
 <h1>Question and decision rule</h1>
-<p>You asked (7 Nov 2026): run SNP-BLUP and ssGBLUP on the same 2
+<p>Aim (7 Nov 2026): run SNP-BLUP and ssGBLUP on the same 2
 replicates of GS_NTM_NUE35, compare genetic response (NTM, NUE) and run
 time, and use the winner for all 20-replicate runs: “higher response
 without demanding much larger run time”.</p>
-<p><strong>Rule (fixed before the runs; my operationalisation of your
+<p><strong>Rule (fixed before the runs; my operationalisation of my
 wording):</strong> ssGBLUP is used for all runs only if
 <strong>both</strong></p>
 <ol style="list-style-type: decimal">
@@ -632,7 +632,7 @@ fwrite(cbind(m, time_ratio_vs_SNPBLUP = c(1, ratio)[match(m$model, c(&quot;SNPBL
 to <code>params/eval_model_choice.txt</code>).</li>
 </ul>
 <p>With only 2 replicates the response difference is not tested
-statistically; the rule above is a practical choice, as you asked, not a
+statistically; the rule above is a practical choice, by design, not a
 significance test.</p>
 <pre class="r"><code>sessionInfo()</code></pre>
 <pre><code>## R version 4.3.3 (2024-02-29)

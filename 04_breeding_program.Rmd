@@ -1,6 +1,6 @@
 ---
 title: "04 - Genomic selection program, breeder's equation, index and mating plan"
-author: "Prepared for Emmanuel Ismaila"
+author: "Prepared by Emmanuel Ismaila for QGG, Aarhus University"
 date: "`r Sys.Date()`"
 output:
   html_document:
@@ -212,7 +212,7 @@ snp_blup <- function(Mtr, Ytr, Xdf) {
 
 ## ssGBLUP alternative (model test, 7 Nov 2026)
 
-You asked to test SNP-BLUP against ssGBLUP inside the breeding programme and keep the one with the
+The aim was to test SNP-BLUP against ssGBLUP inside the breeding programme and keep the one with the
 higher response that does not need a much longer run time. The single-step version here uses the
 same training cows, the same fixed effects (breed x generation, herd x generation) and the same
 assumed heritabilities as SNP-BLUP, so the only differences are (1) `n_nongeno_ss` extra cows that
