@@ -11,7 +11,7 @@
 
 <meta name="author" content="Prepared for Emmanuel Ismaila" />
 
-<meta name="date" content="2026-11-11" />
+<meta name="date" content="2026-11-13" />
 
 <title>05 - Summary: can genomic selection improve nitrogen use efficiency?</title>
 
@@ -1607,7 +1607,7 @@ nitrogen use efficiency?</h1>
 <h3 class="subtitle">Holstein / Red Dairy Cattle / Jersey in Denmark,
 Sweden, Finland and Germany (simulation)</h3>
 <h4 class="author">Prepared for Emmanuel Ismaila</h4>
-<h4 class="date">2026-11-11</h4>
+<h4 class="date">2026-11-13</h4>
 
 </div>
 
@@ -4888,7 +4888,30 @@ if (nrow(reps)) {
     pair_test(&quot;GS_NTM_NUE35_MUN&quot;, &quot;GS_NTM_NUE35&quot;, v), pair_test(ch4_sc, ch4_base, v),
     pair_test(&quot;GS_NTM_NUE35_OCS_dF1&quot;, &quot;GS_NTM_NUE35&quot;, v))))
   pk(pt[, .(comparison, trait, breed, n, mean_diff, sd_diff, same_sign, p_paired)], digits = 4,
-        caption = &quot;Paired differences between scenarios (same seed within replicate); same_sign = replicates with the majority sign; paired t-test&quot;)
+        caption = &quot;Table A (p-values only). Paired differences between scenarios (same seed within replicate); same_sign = replicates with the majority sign; paired t-test, uncorrected&quot;)
+  # 13 Nov 2026 (your request): correction for multiple testing. One family = all paired tests of this section.
+  # EUR is NTM times a constant per breed (the same test), so it is not counted twice and takes the NTM values.
+  fam &lt;- pt[trait != &quot;EUR&quot; &amp; !is.na(p_paired)]
+  fam[, `:=`(p_BH = p.adjust(p_paired, method = &quot;BH&quot;), p_Bonferroni = p.adjust(p_paired, method = &quot;bonferroni&quot;))]
+  pt[fam, on = .(comparison, trait, breed), `:=`(p_BH = i.p_BH, p_Bonferroni = i.p_Bonferroni)]
+  pt[fam[trait == &quot;NTM&quot;][, trait := &quot;EUR&quot;], on = .(comparison, trait, breed), `:=`(p_BH = i.p_BH, p_Bonferroni = i.p_Bonferroni)]
+  n_fam &lt;- nrow(fam)
+  fwrite(pt, file.path(params$base_dir, &quot;paired_tests_multiple_testing.csv&quot;))
+  pk(pt[, .(comparison, trait, breed, n, mean_diff, p_paired, p_BH, p_Bonferroni)], digits = 4,
+     caption = sprintf(&quot;Table B (p-values + corrections). The same tests with Benjamini-Hochberg (false discovery rate) and Bonferroni adjusted p-values; family of %d tests (EUR rows repeat NTM)&quot;, n_fam))
+  mt_count &lt;- rbind(fam[, .(comparison = &quot;All comparisons&quot;, tests = .N, uncorrected = sum(p_paired &lt; 0.05), BH = sum(p_BH &lt; 0.05), Bonferroni = sum(p_Bonferroni &lt; 0.05))],
+                    fam[, .(tests = .N, uncorrected = sum(p_paired &lt; 0.05), BH = sum(p_BH &lt; 0.05), Bonferroni = sum(p_Bonferroni &lt; 0.05)), by = comparison])
+  pk(mt_count, caption = &quot;Table C. Number of tests significant at 5% under each method&quot;)
+  verdict &lt;- function(x) ifelse(x &lt; 0.05, &quot;yes&quot;, &quot;no&quot;)
+  key &lt;- fam[(comparison == &quot;GS_NTM_NUE35 - GS_NTM&quot; &amp; trait %in% c(&quot;NUE&quot;, &quot;NTM&quot;)) | (comparison == &quot;GS_NTM_NUE75 - GS_NTM&quot; &amp; trait %in% c(&quot;NUE&quot;, &quot;NTM&quot;)) |
+             (comparison == &quot;GS_NTM_NUE35_MUN - GS_NTM_NUE35&quot; &amp; trait %in% c(&quot;MUN&quot;, &quot;NUE&quot;, &quot;NTM&quot;)) |
+             (comparison == paste(ch4_sc, &quot;-&quot;, ch4_base) &amp; trait %in% c(&quot;CH4&quot;, &quot;NTM&quot;)) |
+             (comparison == &quot;GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35&quot; &amp; trait %in% c(&quot;dF&quot;, &quot;NTM&quot;, &quot;NUE&quot;))]
+  pk(key[, .(comparison, trait, breed, mean_diff, p_paired, uncorrected = verdict(p_paired), BH = verdict(p_BH), Bonferroni = verdict(p_Bonferroni))], digits = 4,
+     caption = &quot;Table D. Headline results: significant at 5% under each method?&quot;)
+  lost &lt;- fam[p_paired &lt; 0.05 &amp; p_BH &gt;= 0.05][order(p_paired)]
+  pk(lost[, .(comparison, trait, breed, mean_diff, p_paired, p_BH)], digits = 4,
+     caption = &quot;Table E. Results below 0.05 uncorrected that do not pass Benjamini-Hochberg (to be read as not established)&quot;)
 }</code></pre>
 <table>
 <caption>Replicates available per scenario</caption>
@@ -5315,9 +5338,9 @@ replicates</caption>
 </tbody>
 </table>
 <table>
-<caption>Paired differences between scenarios (same seed within
-replicate); same_sign = replicates with the majority sign; paired
-t-test</caption>
+<caption>Table A (p-values only). Paired differences between scenarios
+(same seed within replicate); same_sign = replicates with the majority
+sign; paired t-test, uncorrected</caption>
 <colgroup>
 <col width="40%" />
 <col width="6%" />
@@ -6693,10 +6716,2044 @@ t-test</caption>
 </tr>
 </tbody>
 </table>
-<p>With n replicates the paired t-test has n - 1 degrees of freedom;
-p-values are per breed and per comparison without correction for
-multiple testing, so treat them as a guide to consistency across founder
-populations, not as a formal claim about real populations.</p>
+<table>
+<caption>Table B (p-values + corrections). The same tests with
+Benjamini-Hochberg (false discovery rate) and Bonferroni adjusted
+p-values; family of 120 tests (EUR rows repeat NTM)</caption>
+<colgroup>
+<col width="40%" />
+<col width="6%" />
+<col width="6%" />
+<col width="3%" />
+<col width="11%" />
+<col width="10%" />
+<col width="7%" />
+<col width="14%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">comparison</th>
+<th align="left">trait</th>
+<th align="left">breed</th>
+<th align="right">n</th>
+<th align="right">mean_diff</th>
+<th align="right">p_paired</th>
+<th align="right">p_BH</th>
+<th align="right">p_Bonferroni</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35 - GS_NTM</td>
+<td align="left">NUE</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">1.0814</td>
+<td align="right">0.0000</td>
+<td align="right">0.0004</td>
+<td align="right">0.0035</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35 - GS_NTM</td>
+<td align="left">NUE</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">0.9362</td>
+<td align="right">0.0014</td>
+<td align="right">0.0086</td>
+<td align="right">0.1722</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35 - GS_NTM</td>
+<td align="left">NUE</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">0.8181</td>
+<td align="right">0.0029</td>
+<td align="right">0.0138</td>
+<td align="right">0.3519</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE75 - GS_NTM</td>
+<td align="left">NUE</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">1.4263</td>
+<td align="right">0.0000</td>
+<td align="right">0.0001</td>
+<td align="right">0.0005</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE75 - GS_NTM</td>
+<td align="left">NUE</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">0.9474</td>
+<td align="right">0.0017</td>
+<td align="right">0.0095</td>
+<td align="right">0.2005</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE75 - GS_NTM</td>
+<td align="left">NUE</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">1.1990</td>
+<td align="right">0.0000</td>
+<td align="right">0.0004</td>
+<td align="right">0.0038</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35_MUN - GS_NTM_NUE35</td>
+<td align="left">NUE</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">0.0505</td>
+<td align="right">0.7246</td>
+<td align="right">0.8361</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35_MUN - GS_NTM_NUE35</td>
+<td align="left">NUE</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">-0.2228</td>
+<td align="right">0.3707</td>
+<td align="right">0.5295</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35_MUN - GS_NTM_NUE35</td>
+<td align="left">NUE</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">0.0526</td>
+<td align="right">0.6640</td>
+<td align="right">0.7889</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE75_CH4 - GS_NTM_NUE75</td>
+<td align="left">NUE</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">-0.2771</td>
+<td align="right">0.1808</td>
+<td align="right">0.3100</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE75_CH4 - GS_NTM_NUE75</td>
+<td align="left">NUE</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">-0.1574</td>
+<td align="right">0.3493</td>
+<td align="right">0.5181</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE75_CH4 - GS_NTM_NUE75</td>
+<td align="left">NUE</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">-0.1559</td>
+<td align="right">0.1340</td>
+<td align="right">0.2330</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35</td>
+<td align="left">NUE</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">-0.1328</td>
+<td align="right">0.4140</td>
+<td align="right">0.5681</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35</td>
+<td align="left">NUE</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">-0.7008</td>
+<td align="right">0.0030</td>
+<td align="right">0.0138</td>
+<td align="right">0.3594</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35</td>
+<td align="left">NUE</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">-0.1795</td>
+<td align="right">0.2199</td>
+<td align="right">0.3615</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35 - GS_NTM</td>
+<td align="left">MUN</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">-0.1292</td>
+<td align="right">0.3497</td>
+<td align="right">0.5181</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35 - GS_NTM</td>
+<td align="left">MUN</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">-0.0073</td>
+<td align="right">0.9705</td>
+<td align="right">0.9705</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35 - GS_NTM</td>
+<td align="left">MUN</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">0.0598</td>
+<td align="right">0.6722</td>
+<td align="right">0.7908</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE75 - GS_NTM</td>
+<td align="left">MUN</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">-0.5343</td>
+<td align="right">0.0002</td>
+<td align="right">0.0015</td>
+<td align="right">0.0219</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE75 - GS_NTM</td>
+<td align="left">MUN</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">-0.2436</td>
+<td align="right">0.3193</td>
+<td align="right">0.4849</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE75 - GS_NTM</td>
+<td align="left">MUN</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">-0.1932</td>
+<td align="right">0.3593</td>
+<td align="right">0.5194</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35_MUN - GS_NTM_NUE35</td>
+<td align="left">MUN</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">-1.4208</td>
+<td align="right">0.0001</td>
+<td align="right">0.0012</td>
+<td align="right">0.0171</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35_MUN - GS_NTM_NUE35</td>
+<td align="left">MUN</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">-1.3432</td>
+<td align="right">0.0001</td>
+<td align="right">0.0008</td>
+<td align="right">0.0091</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35_MUN - GS_NTM_NUE35</td>
+<td align="left">MUN</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">-1.2440</td>
+<td align="right">0.0005</td>
+<td align="right">0.0032</td>
+<td align="right">0.0552</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE75_CH4 - GS_NTM_NUE75</td>
+<td align="left">MUN</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">-0.1218</td>
+<td align="right">0.4088</td>
+<td align="right">0.5681</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE75_CH4 - GS_NTM_NUE75</td>
+<td align="left">MUN</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">-0.2255</td>
+<td align="right">0.2667</td>
+<td align="right">0.4156</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE75_CH4 - GS_NTM_NUE75</td>
+<td align="left">MUN</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">-0.3129</td>
+<td align="right">0.2649</td>
+<td align="right">0.4156</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35</td>
+<td align="left">MUN</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">-0.0434</td>
+<td align="right">0.7526</td>
+<td align="right">0.8440</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35</td>
+<td align="left">MUN</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">0.3082</td>
+<td align="right">0.0586</td>
+<td align="right">0.1153</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35</td>
+<td align="left">MUN</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">-0.1884</td>
+<td align="right">0.4302</td>
+<td align="right">0.5737</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35 - GS_NTM</td>
+<td align="left">CH4</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">0.6017</td>
+<td align="right">0.0028</td>
+<td align="right">0.0138</td>
+<td align="right">0.3316</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35 - GS_NTM</td>
+<td align="left">CH4</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">0.3482</td>
+<td align="right">0.0326</td>
+<td align="right">0.0782</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35 - GS_NTM</td>
+<td align="left">CH4</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">0.0132</td>
+<td align="right">0.9405</td>
+<td align="right">0.9484</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE75 - GS_NTM</td>
+<td align="left">CH4</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">0.2406</td>
+<td align="right">0.0833</td>
+<td align="right">0.1561</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE75 - GS_NTM</td>
+<td align="left">CH4</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">0.0546</td>
+<td align="right">0.7731</td>
+<td align="right">0.8476</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE75 - GS_NTM</td>
+<td align="left">CH4</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">-0.0803</td>
+<td align="right">0.6213</td>
+<td align="right">0.7561</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35_MUN - GS_NTM_NUE35</td>
+<td align="left">CH4</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">-0.4935</td>
+<td align="right">0.0143</td>
+<td align="right">0.0435</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35_MUN - GS_NTM_NUE35</td>
+<td align="left">CH4</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">-0.2263</td>
+<td align="right">0.2265</td>
+<td align="right">0.3672</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35_MUN - GS_NTM_NUE35</td>
+<td align="left">CH4</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">-0.1112</td>
+<td align="right">0.4007</td>
+<td align="right">0.5657</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE75_CH4 - GS_NTM_NUE75</td>
+<td align="left">CH4</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">-1.5843</td>
+<td align="right">0.0000</td>
+<td align="right">0.0000</td>
+<td align="right">0.0001</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE75_CH4 - GS_NTM_NUE75</td>
+<td align="left">CH4</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">-1.4826</td>
+<td align="right">0.0000</td>
+<td align="right">0.0004</td>
+<td align="right">0.0029</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE75_CH4 - GS_NTM_NUE75</td>
+<td align="left">CH4</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">-1.4305</td>
+<td align="right">0.0000</td>
+<td align="right">0.0001</td>
+<td align="right">0.0002</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35</td>
+<td align="left">CH4</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">-0.6540</td>
+<td align="right">0.0005</td>
+<td align="right">0.0033</td>
+<td align="right">0.0599</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35</td>
+<td align="left">CH4</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">-0.4833</td>
+<td align="right">0.0150</td>
+<td align="right">0.0435</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35</td>
+<td align="left">CH4</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">-0.0331</td>
+<td align="right">0.8477</td>
+<td align="right">0.8769</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35 - GS_NTM</td>
+<td align="left">MY</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">0.6324</td>
+<td align="right">0.0039</td>
+<td align="right">0.0162</td>
+<td align="right">0.4706</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35 - GS_NTM</td>
+<td align="left">MY</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">0.0689</td>
+<td align="right">0.6958</td>
+<td align="right">0.8106</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35 - GS_NTM</td>
+<td align="left">MY</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">0.4356</td>
+<td align="right">0.0037</td>
+<td align="right">0.0160</td>
+<td align="right">0.4468</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE75 - GS_NTM</td>
+<td align="left">MY</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">0.2289</td>
+<td align="right">0.0109</td>
+<td align="right">0.0354</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE75 - GS_NTM</td>
+<td align="left">MY</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">0.0315</td>
+<td align="right">0.7695</td>
+<td align="right">0.8476</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE75 - GS_NTM</td>
+<td align="left">MY</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">0.2393</td>
+<td align="right">0.2180</td>
+<td align="right">0.3615</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35_MUN - GS_NTM_NUE35</td>
+<td align="left">MY</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">-0.2629</td>
+<td align="right">0.1257</td>
+<td align="right">0.2252</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35_MUN - GS_NTM_NUE35</td>
+<td align="left">MY</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">0.0717</td>
+<td align="right">0.7922</td>
+<td align="right">0.8494</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35_MUN - GS_NTM_NUE35</td>
+<td align="left">MY</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">-0.0919</td>
+<td align="right">0.4214</td>
+<td align="right">0.5681</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE75_CH4 - GS_NTM_NUE75</td>
+<td align="left">MY</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">-0.4932</td>
+<td align="right">0.0086</td>
+<td align="right">0.0294</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE75_CH4 - GS_NTM_NUE75</td>
+<td align="left">MY</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">-0.4692</td>
+<td align="right">0.0009</td>
+<td align="right">0.0055</td>
+<td align="right">0.1054</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE75_CH4 - GS_NTM_NUE75</td>
+<td align="left">MY</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">-0.3458</td>
+<td align="right">0.0556</td>
+<td align="right">0.1112</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35</td>
+<td align="left">MY</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">-0.5240</td>
+<td align="right">0.0055</td>
+<td align="right">0.0220</td>
+<td align="right">0.6604</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35</td>
+<td align="left">MY</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">-0.3532</td>
+<td align="right">0.0501</td>
+<td align="right">0.1037</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35</td>
+<td align="left">MY</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">-0.3530</td>
+<td align="right">0.0204</td>
+<td align="right">0.0533</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35 - GS_NTM</td>
+<td align="left">PY</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">0.8478</td>
+<td align="right">0.0020</td>
+<td align="right">0.0110</td>
+<td align="right">0.2409</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35 - GS_NTM</td>
+<td align="left">PY</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">0.4438</td>
+<td align="right">0.0553</td>
+<td align="right">0.1112</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35 - GS_NTM</td>
+<td align="left">PY</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">0.5115</td>
+<td align="right">0.0115</td>
+<td align="right">0.0362</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE75 - GS_NTM</td>
+<td align="left">PY</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">0.5058</td>
+<td align="right">0.0001</td>
+<td align="right">0.0011</td>
+<td align="right">0.0144</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE75 - GS_NTM</td>
+<td align="left">PY</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">0.1408</td>
+<td align="right">0.4185</td>
+<td align="right">0.5681</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE75 - GS_NTM</td>
+<td align="left">PY</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">0.4356</td>
+<td align="right">0.0070</td>
+<td align="right">0.0264</td>
+<td align="right">0.8435</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35_MUN - GS_NTM_NUE35</td>
+<td align="left">PY</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">-0.5379</td>
+<td align="right">0.0083</td>
+<td align="right">0.0294</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35_MUN - GS_NTM_NUE35</td>
+<td align="left">PY</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">-0.3548</td>
+<td align="right">0.1951</td>
+<td align="right">0.3297</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35_MUN - GS_NTM_NUE35</td>
+<td align="left">PY</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">-0.3076</td>
+<td align="right">0.0150</td>
+<td align="right">0.0435</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE75_CH4 - GS_NTM_NUE75</td>
+<td align="left">PY</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">-0.6962</td>
+<td align="right">0.0001</td>
+<td align="right">0.0007</td>
+<td align="right">0.0067</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE75_CH4 - GS_NTM_NUE75</td>
+<td align="left">PY</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">-0.5603</td>
+<td align="right">0.0033</td>
+<td align="right">0.0146</td>
+<td align="right">0.3941</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE75_CH4 - GS_NTM_NUE75</td>
+<td align="left">PY</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">-0.5425</td>
+<td align="right">0.0001</td>
+<td align="right">0.0010</td>
+<td align="right">0.0126</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35</td>
+<td align="left">PY</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">-0.5032</td>
+<td align="right">0.0085</td>
+<td align="right">0.0294</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35</td>
+<td align="left">PY</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">-0.6348</td>
+<td align="right">0.0025</td>
+<td align="right">0.0131</td>
+<td align="right">0.3004</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35</td>
+<td align="left">PY</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">-0.3477</td>
+<td align="right">0.0638</td>
+<td align="right">0.1236</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35 - GS_NTM</td>
+<td align="left">SF</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">0.0466</td>
+<td align="right">0.7769</td>
+<td align="right">0.8476</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35 - GS_NTM</td>
+<td align="left">SF</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">-0.4233</td>
+<td align="right">0.0098</td>
+<td align="right">0.0328</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35 - GS_NTM</td>
+<td align="left">SF</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">-0.1066</td>
+<td align="right">0.4953</td>
+<td align="right">0.6460</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE75 - GS_NTM</td>
+<td align="left">SF</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">-0.3485</td>
+<td align="right">0.1299</td>
+<td align="right">0.2293</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE75 - GS_NTM</td>
+<td align="left">SF</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">-0.5009</td>
+<td align="right">0.0204</td>
+<td align="right">0.0533</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE75 - GS_NTM</td>
+<td align="left">SF</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">-0.0706</td>
+<td align="right">0.5922</td>
+<td align="right">0.7403</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35_MUN - GS_NTM_NUE35</td>
+<td align="left">SF</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">0.1070</td>
+<td align="right">0.6453</td>
+<td align="right">0.7744</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35_MUN - GS_NTM_NUE35</td>
+<td align="left">SF</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">0.0557</td>
+<td align="right">0.7476</td>
+<td align="right">0.8440</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35_MUN - GS_NTM_NUE35</td>
+<td align="left">SF</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">-0.1784</td>
+<td align="right">0.5020</td>
+<td align="right">0.6477</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE75_CH4 - GS_NTM_NUE75</td>
+<td align="left">SF</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">0.4437</td>
+<td align="right">0.0730</td>
+<td align="right">0.1390</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE75_CH4 - GS_NTM_NUE75</td>
+<td align="left">SF</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">0.5336</td>
+<td align="right">0.0214</td>
+<td align="right">0.0545</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE75_CH4 - GS_NTM_NUE75</td>
+<td align="left">SF</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">0.3411</td>
+<td align="right">0.0324</td>
+<td align="right">0.0782</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35</td>
+<td align="left">SF</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">-0.0808</td>
+<td align="right">0.5316</td>
+<td align="right">0.6715</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35</td>
+<td align="left">SF</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">0.0711</td>
+<td align="right">0.6238</td>
+<td align="right">0.7561</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35</td>
+<td align="left">SF</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">-0.1499</td>
+<td align="right">0.3542</td>
+<td align="right">0.5183</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35 - GS_NTM</td>
+<td align="left">NTM</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">4.6860</td>
+<td align="right">0.0381</td>
+<td align="right">0.0864</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35 - GS_NTM</td>
+<td align="left">NTM</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">0.5025</td>
+<td align="right">0.7928</td>
+<td align="right">0.8494</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35 - GS_NTM</td>
+<td align="left">NTM</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">2.0197</td>
+<td align="right">0.2610</td>
+<td align="right">0.4156</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE75 - GS_NTM</td>
+<td align="left">NTM</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">-0.1833</td>
+<td align="right">0.8461</td>
+<td align="right">0.8769</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE75 - GS_NTM</td>
+<td align="left">NTM</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">-2.8573</td>
+<td align="right">0.0412</td>
+<td align="right">0.0899</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE75 - GS_NTM</td>
+<td align="left">NTM</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">0.8120</td>
+<td align="right">0.6143</td>
+<td align="right">0.7561</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35_MUN - GS_NTM_NUE35</td>
+<td align="left">NTM</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">-5.0264</td>
+<td align="right">0.0375</td>
+<td align="right">0.0864</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35_MUN - GS_NTM_NUE35</td>
+<td align="left">NTM</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">-3.8863</td>
+<td align="right">0.0864</td>
+<td align="right">0.1595</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35_MUN - GS_NTM_NUE35</td>
+<td align="left">NTM</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">-4.6890</td>
+<td align="right">0.0419</td>
+<td align="right">0.0899</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE75_CH4 - GS_NTM_NUE75</td>
+<td align="left">NTM</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">-3.9836</td>
+<td align="right">0.0004</td>
+<td align="right">0.0032</td>
+<td align="right">0.0526</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE75_CH4 - GS_NTM_NUE75</td>
+<td align="left">NTM</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">-3.5395</td>
+<td align="right">0.0152</td>
+<td align="right">0.0435</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE75_CH4 - GS_NTM_NUE75</td>
+<td align="left">NTM</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">-3.9853</td>
+<td align="right">0.0363</td>
+<td align="right">0.0855</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35</td>
+<td align="left">NTM</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">-3.8811</td>
+<td align="right">0.0418</td>
+<td align="right">0.0899</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35</td>
+<td align="left">NTM</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">-3.6927</td>
+<td align="right">0.0325</td>
+<td align="right">0.0782</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35</td>
+<td align="left">NTM</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">-3.2832</td>
+<td align="right">0.0442</td>
+<td align="right">0.0930</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35 - GS_NTM</td>
+<td align="left">EUR</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">46.3915</td>
+<td align="right">0.0381</td>
+<td align="right">0.0864</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35 - GS_NTM</td>
+<td align="left">EUR</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">4.0199</td>
+<td align="right">0.7928</td>
+<td align="right">0.8494</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35 - GS_NTM</td>
+<td align="left">EUR</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">18.5813</td>
+<td align="right">0.2610</td>
+<td align="right">0.4156</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE75 - GS_NTM</td>
+<td align="left">EUR</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">-1.8142</td>
+<td align="right">0.8461</td>
+<td align="right">0.8769</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE75 - GS_NTM</td>
+<td align="left">EUR</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">-22.8587</td>
+<td align="right">0.0412</td>
+<td align="right">0.0899</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE75 - GS_NTM</td>
+<td align="left">EUR</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">7.4707</td>
+<td align="right">0.6143</td>
+<td align="right">0.7561</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35_MUN - GS_NTM_NUE35</td>
+<td align="left">EUR</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">-49.7614</td>
+<td align="right">0.0375</td>
+<td align="right">0.0864</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35_MUN - GS_NTM_NUE35</td>
+<td align="left">EUR</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">-31.0905</td>
+<td align="right">0.0864</td>
+<td align="right">0.1595</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35_MUN - GS_NTM_NUE35</td>
+<td align="left">EUR</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">-43.1392</td>
+<td align="right">0.0419</td>
+<td align="right">0.0899</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE75_CH4 - GS_NTM_NUE75</td>
+<td align="left">EUR</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">-39.4381</td>
+<td align="right">0.0004</td>
+<td align="right">0.0032</td>
+<td align="right">0.0526</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE75_CH4 - GS_NTM_NUE75</td>
+<td align="left">EUR</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">-28.3164</td>
+<td align="right">0.0152</td>
+<td align="right">0.0435</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE75_CH4 - GS_NTM_NUE75</td>
+<td align="left">EUR</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">-36.6652</td>
+<td align="right">0.0363</td>
+<td align="right">0.0855</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35</td>
+<td align="left">EUR</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">-38.4228</td>
+<td align="right">0.0418</td>
+<td align="right">0.0899</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35</td>
+<td align="left">EUR</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">-29.5419</td>
+<td align="right">0.0325</td>
+<td align="right">0.0782</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35</td>
+<td align="left">EUR</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">-30.2057</td>
+<td align="right">0.0442</td>
+<td align="right">0.0930</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35 - GS_NTM</td>
+<td align="left">dF</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">0.0022</td>
+<td align="right">0.0187</td>
+<td align="right">0.0521</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35 - GS_NTM</td>
+<td align="left">dF</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">0.0003</td>
+<td align="right">0.8887</td>
+<td align="right">0.9115</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35 - GS_NTM</td>
+<td align="left">dF</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">-0.0004</td>
+<td align="right">0.8072</td>
+<td align="right">0.8572</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE75 - GS_NTM</td>
+<td align="left">dF</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">0.0019</td>
+<td align="right">0.0201</td>
+<td align="right">0.0533</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE75 - GS_NTM</td>
+<td align="left">dF</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">0.0011</td>
+<td align="right">0.5148</td>
+<td align="right">0.6572</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE75 - GS_NTM</td>
+<td align="left">dF</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">0.0017</td>
+<td align="right">0.2744</td>
+<td align="right">0.4222</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35_MUN - GS_NTM_NUE35</td>
+<td align="left">dF</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">-0.0003</td>
+<td align="right">0.8215</td>
+<td align="right">0.8647</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35_MUN - GS_NTM_NUE35</td>
+<td align="left">dF</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">-0.0001</td>
+<td align="right">0.9321</td>
+<td align="right">0.9479</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35_MUN - GS_NTM_NUE35</td>
+<td align="left">dF</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">-0.0010</td>
+<td align="right">0.4440</td>
+<td align="right">0.5855</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE75_CH4 - GS_NTM_NUE75</td>
+<td align="left">dF</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">-0.0004</td>
+<td align="right">0.7470</td>
+<td align="right">0.8440</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE75_CH4 - GS_NTM_NUE75</td>
+<td align="left">dF</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">-0.0045</td>
+<td align="right">0.0067</td>
+<td align="right">0.0261</td>
+<td align="right">0.8099</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE75_CH4 - GS_NTM_NUE75</td>
+<td align="left">dF</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">-0.0024</td>
+<td align="right">0.1009</td>
+<td align="right">0.1834</td>
+<td align="right">1.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35</td>
+<td align="left">dF</td>
+<td align="left">HOL</td>
+<td align="right">10</td>
+<td align="right">-0.0102</td>
+<td align="right">0.0000</td>
+<td align="right">0.0001</td>
+<td align="right">0.0005</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35</td>
+<td align="left">dF</td>
+<td align="left">JER</td>
+<td align="right">10</td>
+<td align="right">-0.0128</td>
+<td align="right">0.0000</td>
+<td align="right">0.0000</td>
+<td align="right">0.0000</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35</td>
+<td align="left">dF</td>
+<td align="left">RDC</td>
+<td align="right">10</td>
+<td align="right">-0.0101</td>
+<td align="right">0.0000</td>
+<td align="right">0.0001</td>
+<td align="right">0.0004</td>
+</tr>
+</tbody>
+</table>
+<table>
+<caption>Table C. Number of tests significant at 5% under each
+method</caption>
+<colgroup>
+<col width="52%" />
+<col width="8%" />
+<col width="17%" />
+<col width="4%" />
+<col width="16%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">comparison</th>
+<th align="right">tests</th>
+<th align="right">uncorrected</th>
+<th align="right">BH</th>
+<th align="right">Bonferroni</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">All comparisons</td>
+<td align="right">120</td>
+<td align="right">57</td>
+<td align="right">42</td>
+<td align="right">15</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35 - GS_NTM</td>
+<td align="right">24</td>
+<td align="right">12</td>
+<td align="right">9</td>
+<td align="right">1</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE75 - GS_NTM</td>
+<td align="right">24</td>
+<td align="right">10</td>
+<td align="right">7</td>
+<td align="right">4</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35_MUN - GS_NTM_NUE35</td>
+<td align="right">24</td>
+<td align="right">8</td>
+<td align="right">6</td>
+<td align="right">2</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE75_CH4 - GS_NTM_NUE75</td>
+<td align="right">24</td>
+<td align="right">14</td>
+<td align="right">11</td>
+<td align="right">5</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35</td>
+<td align="right">24</td>
+<td align="right">13</td>
+<td align="right">9</td>
+<td align="right">3</td>
+</tr>
+</tbody>
+</table>
+<table style="width:100%;">
+<caption>Table D. Headline results: significant at 5% under each
+method?</caption>
+<colgroup>
+<col width="38%" />
+<col width="6%" />
+<col width="6%" />
+<col width="10%" />
+<col width="9%" />
+<col width="12%" />
+<col width="4%" />
+<col width="11%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">comparison</th>
+<th align="left">trait</th>
+<th align="left">breed</th>
+<th align="right">mean_diff</th>
+<th align="right">p_paired</th>
+<th align="left">uncorrected</th>
+<th align="left">BH</th>
+<th align="left">Bonferroni</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35 - GS_NTM</td>
+<td align="left">NUE</td>
+<td align="left">HOL</td>
+<td align="right">1.0814</td>
+<td align="right">0.0000</td>
+<td align="left">yes</td>
+<td align="left">yes</td>
+<td align="left">yes</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35 - GS_NTM</td>
+<td align="left">NUE</td>
+<td align="left">JER</td>
+<td align="right">0.9362</td>
+<td align="right">0.0014</td>
+<td align="left">yes</td>
+<td align="left">yes</td>
+<td align="left">no</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35 - GS_NTM</td>
+<td align="left">NUE</td>
+<td align="left">RDC</td>
+<td align="right">0.8181</td>
+<td align="right">0.0029</td>
+<td align="left">yes</td>
+<td align="left">yes</td>
+<td align="left">no</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE75 - GS_NTM</td>
+<td align="left">NUE</td>
+<td align="left">HOL</td>
+<td align="right">1.4263</td>
+<td align="right">0.0000</td>
+<td align="left">yes</td>
+<td align="left">yes</td>
+<td align="left">yes</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE75 - GS_NTM</td>
+<td align="left">NUE</td>
+<td align="left">JER</td>
+<td align="right">0.9474</td>
+<td align="right">0.0017</td>
+<td align="left">yes</td>
+<td align="left">yes</td>
+<td align="left">no</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE75 - GS_NTM</td>
+<td align="left">NUE</td>
+<td align="left">RDC</td>
+<td align="right">1.1990</td>
+<td align="right">0.0000</td>
+<td align="left">yes</td>
+<td align="left">yes</td>
+<td align="left">yes</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35_MUN - GS_NTM_NUE35</td>
+<td align="left">NUE</td>
+<td align="left">HOL</td>
+<td align="right">0.0505</td>
+<td align="right">0.7246</td>
+<td align="left">no</td>
+<td align="left">no</td>
+<td align="left">no</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35_MUN - GS_NTM_NUE35</td>
+<td align="left">NUE</td>
+<td align="left">JER</td>
+<td align="right">-0.2228</td>
+<td align="right">0.3707</td>
+<td align="left">no</td>
+<td align="left">no</td>
+<td align="left">no</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35_MUN - GS_NTM_NUE35</td>
+<td align="left">NUE</td>
+<td align="left">RDC</td>
+<td align="right">0.0526</td>
+<td align="right">0.6640</td>
+<td align="left">no</td>
+<td align="left">no</td>
+<td align="left">no</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35</td>
+<td align="left">NUE</td>
+<td align="left">HOL</td>
+<td align="right">-0.1328</td>
+<td align="right">0.4140</td>
+<td align="left">no</td>
+<td align="left">no</td>
+<td align="left">no</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35</td>
+<td align="left">NUE</td>
+<td align="left">JER</td>
+<td align="right">-0.7008</td>
+<td align="right">0.0030</td>
+<td align="left">yes</td>
+<td align="left">yes</td>
+<td align="left">no</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35</td>
+<td align="left">NUE</td>
+<td align="left">RDC</td>
+<td align="right">-0.1795</td>
+<td align="right">0.2199</td>
+<td align="left">no</td>
+<td align="left">no</td>
+<td align="left">no</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35_MUN - GS_NTM_NUE35</td>
+<td align="left">MUN</td>
+<td align="left">HOL</td>
+<td align="right">-1.4208</td>
+<td align="right">0.0001</td>
+<td align="left">yes</td>
+<td align="left">yes</td>
+<td align="left">yes</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35_MUN - GS_NTM_NUE35</td>
+<td align="left">MUN</td>
+<td align="left">JER</td>
+<td align="right">-1.3432</td>
+<td align="right">0.0001</td>
+<td align="left">yes</td>
+<td align="left">yes</td>
+<td align="left">yes</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35_MUN - GS_NTM_NUE35</td>
+<td align="left">MUN</td>
+<td align="left">RDC</td>
+<td align="right">-1.2440</td>
+<td align="right">0.0005</td>
+<td align="left">yes</td>
+<td align="left">yes</td>
+<td align="left">no</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE75_CH4 - GS_NTM_NUE75</td>
+<td align="left">CH4</td>
+<td align="left">HOL</td>
+<td align="right">-1.5843</td>
+<td align="right">0.0000</td>
+<td align="left">yes</td>
+<td align="left">yes</td>
+<td align="left">yes</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE75_CH4 - GS_NTM_NUE75</td>
+<td align="left">CH4</td>
+<td align="left">JER</td>
+<td align="right">-1.4826</td>
+<td align="right">0.0000</td>
+<td align="left">yes</td>
+<td align="left">yes</td>
+<td align="left">yes</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE75_CH4 - GS_NTM_NUE75</td>
+<td align="left">CH4</td>
+<td align="left">RDC</td>
+<td align="right">-1.4305</td>
+<td align="right">0.0000</td>
+<td align="left">yes</td>
+<td align="left">yes</td>
+<td align="left">yes</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35 - GS_NTM</td>
+<td align="left">NTM</td>
+<td align="left">HOL</td>
+<td align="right">4.6860</td>
+<td align="right">0.0381</td>
+<td align="left">yes</td>
+<td align="left">no</td>
+<td align="left">no</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35 - GS_NTM</td>
+<td align="left">NTM</td>
+<td align="left">JER</td>
+<td align="right">0.5025</td>
+<td align="right">0.7928</td>
+<td align="left">no</td>
+<td align="left">no</td>
+<td align="left">no</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35 - GS_NTM</td>
+<td align="left">NTM</td>
+<td align="left">RDC</td>
+<td align="right">2.0197</td>
+<td align="right">0.2610</td>
+<td align="left">no</td>
+<td align="left">no</td>
+<td align="left">no</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE75 - GS_NTM</td>
+<td align="left">NTM</td>
+<td align="left">HOL</td>
+<td align="right">-0.1833</td>
+<td align="right">0.8461</td>
+<td align="left">no</td>
+<td align="left">no</td>
+<td align="left">no</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE75 - GS_NTM</td>
+<td align="left">NTM</td>
+<td align="left">JER</td>
+<td align="right">-2.8573</td>
+<td align="right">0.0412</td>
+<td align="left">yes</td>
+<td align="left">no</td>
+<td align="left">no</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE75 - GS_NTM</td>
+<td align="left">NTM</td>
+<td align="left">RDC</td>
+<td align="right">0.8120</td>
+<td align="right">0.6143</td>
+<td align="left">no</td>
+<td align="left">no</td>
+<td align="left">no</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35_MUN - GS_NTM_NUE35</td>
+<td align="left">NTM</td>
+<td align="left">HOL</td>
+<td align="right">-5.0264</td>
+<td align="right">0.0375</td>
+<td align="left">yes</td>
+<td align="left">no</td>
+<td align="left">no</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35_MUN - GS_NTM_NUE35</td>
+<td align="left">NTM</td>
+<td align="left">JER</td>
+<td align="right">-3.8863</td>
+<td align="right">0.0864</td>
+<td align="left">no</td>
+<td align="left">no</td>
+<td align="left">no</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35_MUN - GS_NTM_NUE35</td>
+<td align="left">NTM</td>
+<td align="left">RDC</td>
+<td align="right">-4.6890</td>
+<td align="right">0.0419</td>
+<td align="left">yes</td>
+<td align="left">no</td>
+<td align="left">no</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE75_CH4 - GS_NTM_NUE75</td>
+<td align="left">NTM</td>
+<td align="left">HOL</td>
+<td align="right">-3.9836</td>
+<td align="right">0.0004</td>
+<td align="left">yes</td>
+<td align="left">yes</td>
+<td align="left">no</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE75_CH4 - GS_NTM_NUE75</td>
+<td align="left">NTM</td>
+<td align="left">JER</td>
+<td align="right">-3.5395</td>
+<td align="right">0.0152</td>
+<td align="left">yes</td>
+<td align="left">yes</td>
+<td align="left">no</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE75_CH4 - GS_NTM_NUE75</td>
+<td align="left">NTM</td>
+<td align="left">RDC</td>
+<td align="right">-3.9853</td>
+<td align="right">0.0363</td>
+<td align="left">yes</td>
+<td align="left">no</td>
+<td align="left">no</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35</td>
+<td align="left">NTM</td>
+<td align="left">HOL</td>
+<td align="right">-3.8811</td>
+<td align="right">0.0418</td>
+<td align="left">yes</td>
+<td align="left">no</td>
+<td align="left">no</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35</td>
+<td align="left">NTM</td>
+<td align="left">JER</td>
+<td align="right">-3.6927</td>
+<td align="right">0.0325</td>
+<td align="left">yes</td>
+<td align="left">no</td>
+<td align="left">no</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35</td>
+<td align="left">NTM</td>
+<td align="left">RDC</td>
+<td align="right">-3.2832</td>
+<td align="right">0.0442</td>
+<td align="left">yes</td>
+<td align="left">no</td>
+<td align="left">no</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35</td>
+<td align="left">dF</td>
+<td align="left">HOL</td>
+<td align="right">-0.0102</td>
+<td align="right">0.0000</td>
+<td align="left">yes</td>
+<td align="left">yes</td>
+<td align="left">yes</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35</td>
+<td align="left">dF</td>
+<td align="left">JER</td>
+<td align="right">-0.0128</td>
+<td align="right">0.0000</td>
+<td align="left">yes</td>
+<td align="left">yes</td>
+<td align="left">yes</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35</td>
+<td align="left">dF</td>
+<td align="left">RDC</td>
+<td align="right">-0.0101</td>
+<td align="right">0.0000</td>
+<td align="left">yes</td>
+<td align="left">yes</td>
+<td align="left">yes</td>
+</tr>
+</tbody>
+</table>
+<table>
+<caption>Table E. Results below 0.05 uncorrected that do not pass
+Benjamini-Hochberg (to be read as not established)</caption>
+<colgroup>
+<col width="48%" />
+<col width="8%" />
+<col width="8%" />
+<col width="13%" />
+<col width="12%" />
+<col width="9%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">comparison</th>
+<th align="left">trait</th>
+<th align="left">breed</th>
+<th align="right">mean_diff</th>
+<th align="right">p_paired</th>
+<th align="right">p_BH</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35 - GS_NTM</td>
+<td align="left">dF</td>
+<td align="left">HOL</td>
+<td align="right">0.0022</td>
+<td align="right">0.0187</td>
+<td align="right">0.0521</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE75 - GS_NTM</td>
+<td align="left">dF</td>
+<td align="left">HOL</td>
+<td align="right">0.0019</td>
+<td align="right">0.0201</td>
+<td align="right">0.0533</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE75 - GS_NTM</td>
+<td align="left">SF</td>
+<td align="left">JER</td>
+<td align="right">-0.5009</td>
+<td align="right">0.0204</td>
+<td align="right">0.0533</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35</td>
+<td align="left">MY</td>
+<td align="left">RDC</td>
+<td align="right">-0.3530</td>
+<td align="right">0.0204</td>
+<td align="right">0.0533</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE75_CH4 - GS_NTM_NUE75</td>
+<td align="left">SF</td>
+<td align="left">JER</td>
+<td align="right">0.5336</td>
+<td align="right">0.0214</td>
+<td align="right">0.0545</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE75_CH4 - GS_NTM_NUE75</td>
+<td align="left">SF</td>
+<td align="left">RDC</td>
+<td align="right">0.3411</td>
+<td align="right">0.0324</td>
+<td align="right">0.0782</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35</td>
+<td align="left">NTM</td>
+<td align="left">JER</td>
+<td align="right">-3.6927</td>
+<td align="right">0.0325</td>
+<td align="right">0.0782</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35 - GS_NTM</td>
+<td align="left">CH4</td>
+<td align="left">JER</td>
+<td align="right">0.3482</td>
+<td align="right">0.0326</td>
+<td align="right">0.0782</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE75_CH4 - GS_NTM_NUE75</td>
+<td align="left">NTM</td>
+<td align="left">RDC</td>
+<td align="right">-3.9853</td>
+<td align="right">0.0363</td>
+<td align="right">0.0855</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35_MUN - GS_NTM_NUE35</td>
+<td align="left">NTM</td>
+<td align="left">HOL</td>
+<td align="right">-5.0264</td>
+<td align="right">0.0375</td>
+<td align="right">0.0864</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35 - GS_NTM</td>
+<td align="left">NTM</td>
+<td align="left">HOL</td>
+<td align="right">4.6860</td>
+<td align="right">0.0381</td>
+<td align="right">0.0864</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE75 - GS_NTM</td>
+<td align="left">NTM</td>
+<td align="left">JER</td>
+<td align="right">-2.8573</td>
+<td align="right">0.0412</td>
+<td align="right">0.0899</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35</td>
+<td align="left">NTM</td>
+<td align="left">HOL</td>
+<td align="right">-3.8811</td>
+<td align="right">0.0418</td>
+<td align="right">0.0899</td>
+</tr>
+<tr class="even">
+<td align="left">GS_NTM_NUE35_MUN - GS_NTM_NUE35</td>
+<td align="left">NTM</td>
+<td align="left">RDC</td>
+<td align="right">-4.6890</td>
+<td align="right">0.0419</td>
+<td align="right">0.0899</td>
+</tr>
+<tr class="odd">
+<td align="left">GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35</td>
+<td align="left">NTM</td>
+<td align="left">RDC</td>
+<td align="right">-3.2832</td>
+<td align="right">0.0442</td>
+<td align="right">0.0930</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Multiple testing (13 Nov 2026).</strong> The section runs 120
+paired tests, so about 6 would fall below 0.05 by chance if no scenario
+differed. Three readings are given:</p>
+<table>
+<colgroup>
+<col width="20%" />
+<col width="20%" />
+<col width="20%" />
+<col width="20%" />
+<col width="20%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Method</th>
+<th>Controls</th>
+<th>Rule</th>
+<th>Strength</th>
+<th>Weakness here</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Uncorrected p (Table A)</td>
+<td>Error rate of each single test</td>
+<td>p &lt; 0.05</td>
+<td>Most power</td>
+<td>Many tests: some “significant” results are chance</td>
+</tr>
+<tr class="even">
+<td>Benjamini-Hochberg (BH)</td>
+<td>False discovery rate: expected share of false results among those
+declared significant</td>
+<td>adjusted p &lt; 0.05</td>
+<td>Keeps power with many tests; proven for independent or positively
+dependent tests (Benjamini &amp; Hochberg 1995; Benjamini &amp;
+Yekutieli 2001)</td>
+<td>Allows about 5% of the declared results to be false</td>
+</tr>
+<tr class="odd">
+<td>Bonferroni</td>
+<td>Family-wise error rate: probability of even one false result</td>
+<td>p x number of tests &lt; 0.05</td>
+<td>Strictest guarantee</td>
+<td>Assumes the worst case; very low power with 10 replicates and
+correlated tests</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Preferred for this study: Benjamini-Hochberg.</strong> The
+tests are many and dependent (the same 10 replicates, genetically
+correlated traits), the aim is to screen which scenario differences are
+consistent rather than to confirm one hypothesis, and replicates are
+few, so Bonferroni would hide real differences. BH is proven to control
+the false discovery rate for independent or positively dependent tests;
+under other forms of dependence it is not guaranteed, which is a further
+reason to show Bonferroni next to it. Bonferroni is shown as the
+conservative bound: a result that passes it is beyond reasonable doubt
+in this simulation. The p-values quoted in the breeding-plan section
+below are uncorrected; a difference listed in Table E should be read as
+<strong>not established</strong>.</p>
+<p>With n replicates the paired t-test has n - 1 degrees of freedom. All
+three readings describe consistency across simulated founder
+populations, not a formal claim about real populations.</p>
 <p><strong>Simulation vs selection-index theory.</strong> The ratio of
 NUE responses (NUE index / NTM index) from the simulation is compared
 with the ratio expected from file 00 (true breeding values, infinite

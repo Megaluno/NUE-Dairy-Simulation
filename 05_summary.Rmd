@@ -408,13 +408,51 @@ if (nrow(reps)) {
     pair_test("GS_NTM_NUE35_MUN", "GS_NTM_NUE35", v), pair_test(ch4_sc, ch4_base, v),
     pair_test("GS_NTM_NUE35_OCS_dF1", "GS_NTM_NUE35", v))))
   pk(pt[, .(comparison, trait, breed, n, mean_diff, sd_diff, same_sign, p_paired)], digits = 4,
-        caption = "Paired differences between scenarios (same seed within replicate); same_sign = replicates with the majority sign; paired t-test")
+        caption = "Table A (p-values only). Paired differences between scenarios (same seed within replicate); same_sign = replicates with the majority sign; paired t-test, uncorrected")
+  # 13 Nov 2026 (your request): correction for multiple testing. One family = all paired tests of this section.
+  # EUR is NTM times a constant per breed (the same test), so it is not counted twice and takes the NTM values.
+  fam <- pt[trait != "EUR" & !is.na(p_paired)]
+  fam[, `:=`(p_BH = p.adjust(p_paired, method = "BH"), p_Bonferroni = p.adjust(p_paired, method = "bonferroni"))]
+  pt[fam, on = .(comparison, trait, breed), `:=`(p_BH = i.p_BH, p_Bonferroni = i.p_Bonferroni)]
+  pt[fam[trait == "NTM"][, trait := "EUR"], on = .(comparison, trait, breed), `:=`(p_BH = i.p_BH, p_Bonferroni = i.p_Bonferroni)]
+  n_fam <- nrow(fam)
+  fwrite(pt, file.path(params$base_dir, "paired_tests_multiple_testing.csv"))
+  pk(pt[, .(comparison, trait, breed, n, mean_diff, p_paired, p_BH, p_Bonferroni)], digits = 4,
+     caption = sprintf("Table B (p-values + corrections). The same tests with Benjamini-Hochberg (false discovery rate) and Bonferroni adjusted p-values; family of %d tests (EUR rows repeat NTM)", n_fam))
+  mt_count <- rbind(fam[, .(comparison = "All comparisons", tests = .N, uncorrected = sum(p_paired < 0.05), BH = sum(p_BH < 0.05), Bonferroni = sum(p_Bonferroni < 0.05))],
+                    fam[, .(tests = .N, uncorrected = sum(p_paired < 0.05), BH = sum(p_BH < 0.05), Bonferroni = sum(p_Bonferroni < 0.05)), by = comparison])
+  pk(mt_count, caption = "Table C. Number of tests significant at 5% under each method")
+  verdict <- function(x) ifelse(x < 0.05, "yes", "no")
+  key <- fam[(comparison == "GS_NTM_NUE35 - GS_NTM" & trait %in% c("NUE", "NTM")) | (comparison == "GS_NTM_NUE75 - GS_NTM" & trait %in% c("NUE", "NTM")) |
+             (comparison == "GS_NTM_NUE35_MUN - GS_NTM_NUE35" & trait %in% c("MUN", "NUE", "NTM")) |
+             (comparison == paste(ch4_sc, "-", ch4_base) & trait %in% c("CH4", "NTM")) |
+             (comparison == "GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35" & trait %in% c("dF", "NTM", "NUE"))]
+  pk(key[, .(comparison, trait, breed, mean_diff, p_paired, uncorrected = verdict(p_paired), BH = verdict(p_BH), Bonferroni = verdict(p_Bonferroni))], digits = 4,
+     caption = "Table D. Headline results: significant at 5% under each method?")
+  lost <- fam[p_paired < 0.05 & p_BH >= 0.05][order(p_paired)]
+  pk(lost[, .(comparison, trait, breed, mean_diff, p_paired, p_BH)], digits = 4,
+     caption = "Table E. Results below 0.05 uncorrected that do not pass Benjamini-Hochberg (to be read as not established)")
 }
 ```
 
-With n replicates the paired t-test has n - 1 degrees of freedom; p-values are per breed and per
-comparison without correction for multiple testing, so treat them as a guide to consistency across
-founder populations, not as a formal claim about real populations.
+**Multiple testing (13 Nov 2026).** The section runs `r if (exists("n_fam")) n_fam else NA` paired tests, so about
+`r if (exists("n_fam")) round(0.05 * n_fam) else NA` would fall below 0.05 by chance if no scenario differed. Three readings are given:
+
+| Method | Controls | Rule | Strength | Weakness here |
+|---|---|---|---|---|
+| Uncorrected p (Table A) | Error rate of each single test | p < 0.05 | Most power | Many tests: some "significant" results are chance |
+| Benjamini-Hochberg (BH) | False discovery rate: expected share of false results among those declared significant | adjusted p < 0.05 | Keeps power with many tests; proven for independent or positively dependent tests (Benjamini & Hochberg 1995; Benjamini & Yekutieli 2001) | Allows about 5% of the declared results to be false |
+| Bonferroni | Family-wise error rate: probability of even one false result | p x number of tests < 0.05 | Strictest guarantee | Assumes the worst case; very low power with 10 replicates and correlated tests |
+
+**Preferred for this study: Benjamini-Hochberg.** The tests are many and dependent (the same 10 replicates, genetically correlated traits),
+the aim is to screen which scenario differences are consistent rather than to confirm one hypothesis, and replicates are few,
+so Bonferroni would hide real differences. BH is proven to control the false discovery rate for independent or positively
+dependent tests; under other forms of dependence it is not guaranteed, which is a further reason to show Bonferroni next to it. Bonferroni is shown as the
+conservative bound: a result that passes it is beyond reasonable doubt in this simulation. The p-values quoted in the
+breeding-plan section below are uncorrected; a difference listed in Table E should be read as **not established**.
+
+With n replicates the paired t-test has n - 1 degrees of freedom. All three readings describe consistency across
+simulated founder populations, not a formal claim about real populations.
 
 **Simulation vs selection-index theory.** The ratio of NUE responses (NUE index / NTM index)
 from the simulation is compared with the ratio expected from file 00 (true breeding values,

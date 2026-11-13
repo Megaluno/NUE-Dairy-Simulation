@@ -19,6 +19,7 @@ It asks one question: **if nitrogen use efficiency (NUE) is added to the Nordic 
   - [Step 3: multi-trait models and GxE](#step-3-multi-trait-models-and-gxe-03_multitrait_gxermd)
   - [Step 4: the breeding programme](#step-4-the-breeding-programme-04_breeding_programrmd)
   - [Step 5: summary and statistics](#step-5-summary-and-statistics-05_summaryrmd)
+- [Statistical testing and multiple comparisons](#statistical-testing-and-multiple-comparisons)
 - [Sensitivity analyses](#sensitivity-analyses)
 - [Limitations](#limitations)
 - [How to run](#how-to-run)
@@ -29,16 +30,16 @@ It asks one question: **if nitrogen use efficiency (NUE) is added to the Nordic 
 ## Main results
 
 Responses are over 10 generations of selection, in founder genetic standard deviations (SD).
-Differences are paired within replicate (10 replicates, each with its own founder population); p-values are from paired t-tests and are not corrected for multiple testing.
+Differences are paired within replicate (10 replicates, each with its own founder population). The p-values in this table are uncorrected paired t-tests; see [Statistical testing](#statistical-testing-and-multiple-comparisons) for the corrected reading.
 
 | Question | Result |
 |---|---|
 | Does NTM alone improve NUE? | Yes, by 3.3 to 3.4 SD in all breeds, but only through NUE's genetic correlations with yield. With those correlations set to 0, the gain is about 0. |
 | What does an explicit NUE weight add? | Weight 0.35: HOL +1.08, JER +0.94, RDC +0.82 SD of NUE (all p <= 0.003). Weight 0.75: +0.95 to +1.43 SD. |
 | What does the NUE weight cost in NTM? | Too small to detect at weight 0.35: theory predicts about 1.3 to 1.6 index units, and the replicate SD of the difference is 5 to 6 units. |
-| What happens to methane? | CH4 rises 1.6 to 2.1 SD under NTM alone. A CH4 weight of -0.5 lowers it by 1.4 to 1.6 SD, at EUR 28 to 39 per cow-year. |
-| Does selecting against milk urea (MUN) help NUE? | No. MUN falls 1.2 to 1.4 SD, NUE does not change, and it costs EUR 31 to 50 per cow-year. |
-| Can inbreeding be controlled? | Unconstrained genomic selection: 1.8 to 2.2% per generation. Optimum contribution selection: 0.7 to 1.0%, at EUR 30 to 38 per cow-year. |
+| What happens to methane? | CH4 rises 1.6 to 2.1 SD under NTM alone. A CH4 weight of -0.5 lowers it by 1.4 to 1.6 SD, at about EUR 28 to 39 per cow-year (the cost passes correction in HOL and JER only). |
+| Does selecting against milk urea (MUN) help NUE? | No. MUN falls 1.2 to 1.4 SD and NUE does not change. The estimated cost is EUR 31 to 50 per cow-year, but it does not pass correction for multiple testing. |
+| Can inbreeding be controlled? | Unconstrained genomic selection: 1.8 to 2.2% per generation. Optimum contribution selection: 0.7 to 1.0%. Its estimated cost is EUR 30 to 38 per cow-year, which does not pass correction for multiple testing. |
 | Is there genotype x country interaction? | Could not be estimated reliably at this sample size (see Step 3). |
 
 Full tables: [`reports/05_summary.html`](reports/05_summary.html) (download and open in a browser) and [`results/NUE_replicate_results.xlsx`](results/NUE_replicate_results.xlsx).
@@ -162,6 +163,39 @@ Each step is one R Markdown file. It reads only the outputs of earlier steps and
 - **Check against theory**: the simulated NUE response relative to `GS_NTM` matches selection-index theory at weight 0.35 (HOL 1.32 vs 1.32) and falls below it at 0.75, consistent with NUE EBVs being less accurate than protein yield EBVs.
 - **Power**: the report computes how many replicates would be needed to detect the theoretical NTM cost (over 100 per breed at weight 0.35).
 
+## Statistical testing and multiple comparisons
+
+Step 5 runs 120 paired tests (5 scenario comparisons x 8 measures x 3 breeds), so about 6 would fall below 0.05 by chance alone.
+The report therefore gives every test three ways: uncorrected, Benjamini-Hochberg (BH) and Bonferroni.
+
+| Method | Controls | Tests significant at 5% (of 120) |
+|---|---|---|
+| Uncorrected p-value | Error rate of each single test | 57 |
+| Benjamini-Hochberg | False discovery rate: the expected share of false results among those declared significant | 42 |
+| Bonferroni | Family-wise error rate: the chance of even one false result | 15 |
+
+How the headline results differ (number of breeds, out of 3, significant at 5%):
+
+| Result | Uncorrected | Benjamini-Hochberg | Bonferroni |
+|---|---|---|---|
+| NUE gain from NUE weight 0.35 | 3 | 3 | 1 (HOL) |
+| NUE gain from NUE weight 0.75 | 3 | 3 | 2 (HOL, RDC) |
+| CH4 reduction from the CH4 weight | 3 | 3 | 3 |
+| MUN reduction from the MUN weight | 3 | 3 | 2 (HOL, JER) |
+| Inbreeding reduction from optimum contribution selection | 3 | 3 | 3 |
+| NTM cost of the CH4 weight | 3 | 2 (HOL, JER) | 0 |
+| NTM cost of the MUN weight | 2 | 0 | 0 |
+| NTM cost of optimum contribution selection | 3 | 0 | 0 |
+| NTM change from NUE weight 0.35 (HOL +4.7) | 1 | 0 | 0 |
+
+**Preferred reading: Benjamini-Hochberg.** The study screens many scenario differences rather than confirming one hypothesis,
+the tests are dependent (same replicates, correlated traits), and there are only 10 replicates, so Bonferroni has very low power
+and would hide real differences. Uncorrected p-values overstate the evidence: the 15 results that pass uncorrected but fail BH
+are all near p = 0.02 to 0.05, and most concern NTM costs. Bonferroni is kept as the conservative bound.
+BH is proven for independent or positively dependent tests (Benjamini & Hochberg 1995; Benjamini & Yekutieli 2001); it is not guaranteed under every form of dependence.
+
+All adjusted p-values: [`results/sim_FULL_rg1.00/paired_tests_multiple_testing.csv`](results/sim_FULL_rg1.00/paired_tests_multiple_testing.csv) and Tables A to E of the summary report.
+
 ## Sensitivity analyses
 
 | Set | Change | Result |
@@ -179,9 +213,9 @@ The recommendation to add an NUE weight does not depend on the uncertain NUE cor
 - Only 64 to 72% of the NTM weight is simulated, so absolute EUR values are too large. Comparisons between scenarios are less affected.
 - 10,005 SNP and a 1,500-cow subsample for G-based cross-validation and GxE, because of computing limits.
 - CH4 parameters from Danish Holstein are applied to all breeds.
-- p-values are not corrected for multiple testing.
+- NTM cost estimates of the MUN weight and of optimum contribution selection do not pass correction for multiple testing; more replicates are needed.
 
-The full list of assumptions and the verification log (22 entries of bugs found, fixes and checks) are in [`docs/pipeline_notes_and_verification_log.md`](docs/pipeline_notes_and_verification_log.md).
+The full list of assumptions and the verification log (23 entries of bugs found, fixes and checks) are in [`docs/pipeline_notes_and_verification_log.md`](docs/pipeline_notes_and_verification_log.md).
 
 **What real data would add.** Genetic correlations of NUE with production, feed efficiency, health, fertility and resilience in Nordic breeds; whether they change across lactation and parity; and GxE estimated on the full population. The pipeline reads all parameters from `params/`, so real estimates can replace the literature values directly.
 
@@ -220,6 +254,8 @@ Large simulation state files (`*.rds` genomes, phenotype and pedigree files) are
 
 ## Key references
 
+- Benjamini & Hochberg (1995) *J R Stat Soc B* 57:289-300. False discovery rate.
+- Benjamini & Yekutieli (2001) *Ann Stat* 29:1165-1188. FDR under dependence.
 - Buitenhuis & Poulsen (2023) *J Dairy Sci* 106:5562-5569. Milk urea heritability in Danish breeds.
 - Chen et al. (2021) *J Dairy Sci* 104:4413-4423. Heritability of predicted NUE.
 - Jorjani, Klei & Emanuelson (2003) *J Dairy Sci* 86:677-679. Weighted bending.
