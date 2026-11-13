@@ -1,0 +1,689 @@
+---
+title: "04 - Genomic selection program, breeder's equation, index and mating plan"
+author: "Prepared for Emmanuel Ismaila"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    code_folding: show
+params:
+  sim_dir: "sim_TEST_rg1.00"
+  n_gs_gen: 10                 # generations of selection after burn-in
+  n_train_total: 6000          # genotyped + phenotyped cows per generation used for training
+  elite_dam_prop: 0.15         # "top 10-20% per breed" (pipeline figure) -> 15% bull dams
+  dam_prop: 0.80               # cows used as dams of female replacements (as in burn-in)
+  f_max: 0.06                  # max expected progeny inbreeding (pipeline figure: < 6%)
+  scenarios: ["PHENO", "GS_NTM", "GS_NTM_NUE35", "GS_NTM_NUE75", "GS_NTM_NUE35_MUN", "CH4_KNEE", "GS_NTM_NUE35_MATE", "GS_NTM_NUE35_OCS"]
+  eval_model: "auto"           # "SNPBLUP", "ssGBLUP", or "auto" = winner of 04b_model_test (params/eval_model_choice.txt; SNPBLUP if absent)
+  n_nongeno_ss: 6000           # ssGBLUP only: extra phenotyped, NOT genotyped training cows (1:1 with genotyped, as file 02)
+  ocs_dF: 0.005                # OCS target rate of inbreeding per generation (~5% over 10 generations)
+  ocs_n_cand: 300              # bull candidates per breed entering the OCS optimisation
+  seed: 20261103
+  rep_id: 0                    # replicate number; 0 = original run. Seed = seed + rep_id
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+suppressPackageStartupMessages({
+  library(AlphaSimR); library(data.table); library(Matrix); library(ggplot2); library(knitr)
+})
+set.seed(params$seed)
+t0 <- Sys.time()
+eval_model <- if (params$eval_model != "auto") params$eval_model else
+  if (file.exists("params/eval_model_choice.txt")) readLines("params/eval_model_choice.txt")[1] else "SNPBLUP"
+stopifnot(eval_model %in% c("SNPBLUP", "ssGBLUP"))
+
+# progress log (knitr discards message() output when message = FALSE)
+progress <- function(...) cat(format(Sys.time(), "%H:%M:%S"), ..., "\n",
+                              file = file.path(params$sim_dir, "progress.log"), append = TRUE)
+```
+
+# What this file does
+
+Starting from the end of the phenotypic burn-in (file 01), four breeding programmes are run
+for `r params$n_gs_gen` generations **from the same starting population**:
+
+| Scenario | Selection criterion | Mating |
+|---|---|---|
+| PHENO | herd-corrected phenotypes (cows), dam index (bulls), NTM weights | random |
+| GS_NTM | genomic EBV, NTM index (May 2026 weights, file 00) - current Nordic practice | random |
+| GS_NTM_NUE35 | as GS_NTM plus NUE weight 0.35 (= Saved Feed weight) | random |
+| GS_NTM_NUE75 | as GS_NTM plus NUE weight 0.75 | random |
+| GS_NTM_NUE35_MUN | as GS_NTM_NUE35 plus MUN weight -0.35 (lower MUN = less N lost in urine) | random |
+| GS_NTM_NUE<nn>_CH4 | NUE weight plus the CH4 weight at the knee of the CH4 weight sweep (file 00 picks both; 17-trait set: NUE 0.75, CH4 -0.50) | random |
+| GS_NTM_NUE35_MATE | as GS_NTM_NUE35 | mate allocation with expected progeny F < `r params$f_max` |
+| GS_NTM_NUE35_OCS | as GS_NTM_NUE35, optimum contribution selection of bulls (target dF `ocs_dF`) | mate allocation within OCS contributions |
+
+The two NUE indices differ from GS_NTM **only in the NUE weight**, so differences in any
+trait are attributable to that one weight. The earlier illustrative indices (GS_PROD, GS_NUE,
+GS_NUE_noMUN; superseded 3 Nov 2026) are in `archive_illustrative_index/`.
+
+Genomic EBVs come from **SNP effects** (SNP-BLUP), so EBV = Σ dosage x marker effect.
+Training is strictly forward: calves are selected before their own (or sisters') CFIT
+records exist, matching the pipeline timeline (genotyping year 2, phenotypes from year 4).
+
+Each call runs one replicate (`rep_id`); replicates use seed + `rep_id`, with the same random
+stream start for every scenario within a replicate, so scenarios are compared **paired**.
+
+# Load burn-in state
+
+```{r load}
+st <- readRDS(file.path(params$sim_dir, "burnin_state.rds")); SP <- st$SP
+# 8 Nov 2026 (memory): only the last two burn-in generations of cows are used below (training set)
+st$kept_cows <- st$kept_cows[as.integer(sub(" .*", "", names(st$kept_cows))) >= max(as.integer(sub(" .*", "", names(st$kept_cows)))) - 1]
+invisible(gc())
+memlog <- function(tag) progress(params$scenarios[1], " ", tag, " | R memory in use (MB): ", round(sum(gc()[, 2])))   # 8 Nov 2026
+memlog("state loaded")
+phen0 <- fread(file.path(params$sim_dir, "phenotypes.csv"))
+phen0 <- phen0[generation >= max(generation) - 1]          # only the last two burn-in generations are used
+trend0 <- fread(file.path(params$sim_dir, "trend_burnin.csv"))
+h2 <- fread(if (file.exists(file.path(params$sim_dir, "h2_used.csv"))) file.path(params$sim_dir, "h2_used.csv") else "params/h2.csv")   # h2 of this burn-in (sensitivity sets differ)
+split <- fread("params/breed_country_split.csv"); herds_tab <- fread("params/herds.csv")
+traits <- st$traits; nT <- length(traits); breeds <- c("HOL", "RDC", "JER")
+countries <- unique(split$country); nC <- length(countries)
+all_herds <- herds_tab$herd; herd_country <- herds_tab$country
+gxe <- st$gxe_rg < 1
+n_cow <- round(split[, sum(n), by = breed][match(breeds, breed), V1] * st$design$scale)
+names(n_cow) <- breeds
+sires_n <- st$design$sires_per_breed
+burn_end <- max(phen0$generation)
+cat("Start generation:", burn_end, "| cows per breed:", paste(n_cow, collapse = "/"),
+    "| sires:", paste(sires_n, collapse = "/"), "| GxE scenario:", gxe, "\n")
+```
+
+# Breeding goal and selection indices
+
+Index weights act on **standardised** breeding values (divided by the genetic SD of each
+trait at the end of burn-in). They are the **NTM sub-index weights (May 2026)**, mapped onto
+the simulated traits in file 00 (`params/index_weights.csv`), and are **breed-specific**.
+NUE, MUN, CH4 and LNVAR have no NTM weight; NUE is added at 0.35 or 0.75, MUN at -0.35 and CH4 at -0.50 (file 00). Saved Feed (SF) carries the NTM Saved Feed weight.
+
+```{r index}
+iw <- fread("params/index_weights.csv")
+ntm_of <- function(s) sub("_(MATE|OCS)$", "", s)          # MATE/OCS use their base index
+idx_def <- fread("params/index_definitions.csv")            # indices defined in file 00
+all_scen <- c("PHENO", idx_def$index, "GS_NTM_NUE35_MATE", "GS_NTM_NUE35_OCS")
+W_idx <- setNames(lapply(all_scen, function(s) {
+  base <- if (s == "PHENO") "GS_NTM" else ntm_of(s)
+  stopifnot(base %in% iw$index)
+  setNames(lapply(breeds, function(b) { x <- iw[index == base & breed == b]; setNames(x$weight, x$trait)[traits] }), breeds)
+}), all_scen)
+# "CH4_KNEE" = the methane index chosen in file 00 (its name depends on which NUE weight wins the sweep)
+scen_req <- ifelse(params$scenarios == "CH4_KNEE", idx_def[ch4 != 0, index][1], params$scenarios)
+stopifnot(!anyNA(unlist(W_idx)), all(scen_req %in% all_scen))
+kable(idx_def, caption = "Extra weights (per genetic SD) added to the NTM weights, from file 00")
+kable(dcast(iw[weight != 0 | trait %in% c("NUE", "MUN", "CH4")], trait ~ index + breed, value.var = "weight"), digits = 3,
+      caption = "Index weights per genetic SD (all other traits 0)")
+is_ocs  <- function(s) grepl("_OCS$", s)
+is_mate <- function(s) grepl("_(MATE|OCS)$", s)
+
+# genetic SD per trait at the end of burn-in (standardisation constant, fixed thereafter)
+sdA0 <- sapply(traits, function(tr) sd(phen0[generation == burn_end][[paste0("TBV_", tr)]]))
+round(sdA0, 3)
+```
+
+# Simulation functions
+
+`make_pheno()` and `assign_blocks()` are identical to file 01 (single-breed herds since 7 Nov 2026;
+herd-generation effects; breed-specific residual variance fixed at burn-in values).
+
+```{r fns}
+varE <- st$varE; herd_sd <- st$herd_sd
+herd_breed <- herds_tab$breed
+# single-breed herds (CFIT farms, file 00): cows of breed b go to b's herds, countries in proportion
+# to the CFIT split (largest remainder), herds filled evenly - identical to file 01
+assign_blocks <- function(n, gen, b) {
+  sp <- split[breed == b][match(countries, country)]
+  x <- n * sp$n / sum(sp$n); k <- floor(x); left <- n - sum(k)
+  if (left > 0) { o <- order(-(x - k), seq_along(x)); k[o[seq_len(left)]] <- k[o[seq_len(left)]] + 1 }
+  cty <- rep(countries, k); hrd <- character(n)
+  for (c in countries) { i <- which(cty == c); h <- all_herds[herd_breed == b & herd_country == c]
+    if (length(i)) hrd[i] <- rep(h, length.out = length(i))[sample.int(length(i))] }
+  o <- sample.int(n); data.table(country = cty[o], herd = hrd[o], generation = gen)
+}
+draw_herd_z <- function() matrix(rnorm(length(all_herds) * nT), ncol = nT,
+                                 dimnames = list(all_herds, traits))
+own_country_G <- function(pop, cty) {
+  G <- gv(pop)
+  if (!gxe) { colnames(G) <- traits; return(G) }
+  t(sapply(seq_len(nInd(pop)), function(k) {
+    ci <- match(cty[k], countries); G[k, ((ci - 1) * nT + 1):(ci * nT)] }))
+}
+# breeding goal value = average over countries (identical to own-country value if no GxE)
+goal_G <- function(pop) {
+  G <- gv(pop); if (!gxe) { colnames(G) <- traits; return(G) }
+  A <- Reduce(`+`, lapply(seq_len(nC), function(ci) G[, ((ci - 1) * nT + 1):(ci * nT)])) / nC
+  colnames(A) <- traits; A
+}
+make_pheno <- function(pop, breed, blocks, herd_z) {
+  G <- own_country_G(pop, blocks$country); colnames(G) <- traits
+  H <- sweep(herd_z, 2, herd_sd[, breed], `*`)
+  E <- matrix(rnorm(nInd(pop) * nT, 0, rep(sqrt(varE[, breed]), each = nInd(pop))), ncol = nT)
+  P <- G + H[blocks$herd, , drop = FALSE] + E; colnames(P) <- traits
+  P
+}
+trunc_i <- function(p) dnorm(qnorm(1 - p)) / p            # selection intensity, truncation
+```
+
+## SNP-BLUP (marker effects)
+
+For each trait: **y\*** = **Wβ** + **e**, fixed effects (breed x generation, herd x generation)
+absorbed exactly: **W\*** = (I - P~X~)W, **y\*** = (I - P~X~)y. Then
+β = (W\*'W\* + λI)^-1^ W\*'y\* = W\*'(W\*W\*' + λI)^-1^ y\* (the two forms are algebraically identical;
+the second needs an n x n rather than an SNP x SNP eigen-decomposition, which matters with 50k SNP),
+solved for all traits with one eigen-decomposition.
+λ = σ^2^~e~ / σ^2^~β~, σ^2^~β~ = σ^2^~A~ / Σ2pq, with σ^2^~A~ = h^2^ var(y\*) using the
+**assumed heritability** from file 00 (breed-weighted). Fixing variance ratios at assumed
+values is how routine evaluations run between variance-component re-estimations.
+
+```{r snpblup}
+h2_mix <- function(brd) sapply(traits, function(tr)
+  sum(table(factor(brd, breeds)) * unlist(h2[code == tr, ..breeds])) / length(brd))
+
+snp_blup <- function(Mtr, Ytr, Xdf) {
+  X  <- model.matrix(~ factor(bg) + factor(hg), data = Xdf)
+  q  <- qr(X); X <- X[, q$pivot[seq_len(q$rank)], drop = FALSE]
+  XtXi <- solve(crossprod(X))
+  absorb <- function(A) A - X %*% (XtXi %*% crossprod(X, A))     # P A, with P = I - X(X'X)^-1 X'
+  p <- colMeans(Mtr) / 2; k2pq <- 2 * sum(p * (1 - p))
+  # dual (n x n) form, exact for ridge regression: (W'W + lam I)^-1 W'y = W'(WW' + lam I)^-1 y,
+  # here with fixed effects absorbed, Ws = P W. With ~50k SNP and ~6k cows this needs one n x n
+  # eigen-decomposition instead of a 50k x 50k one.
+  # 8 Nov 2026 (memory, 7 GB machine): Ws is never formed. Ws Ws' = P (W W') P, with W W' summed
+  # over blocks of SNP, and Ws' z = W' (P z). Same algebra as before, so the same SNP effects
+  # (up to floating-point rounding).
+  K <- matrix(0, nrow(Mtr), nrow(Mtr))
+  for (cols in split(seq_len(ncol(Mtr)), ceiling(seq_len(ncol(Mtr)) / 2000))) K <- K + tcrossprod(Mtr[, cols, drop = FALSE] - 1)
+  K <- absorb(t(absorb(K))); K <- (K + t(K)) / 2                 # P K P, symmetrised against rounding
+  e <- eigen(K, symmetric = TRUE); rm(K); invisible(gc())
+  Ys <- absorb(Ytr)
+  rhs <- crossprod(e$vectors, Ys)
+  hh <- h2_mix(Xdf$breed)
+  beta <- sapply(seq_len(nT), function(j) {
+    vy <- var(Ys[, j]); lam <- (1 - hh[j]) * vy / (hh[j] * vy / k2pq)
+    Pz <- absorb(e$vectors %*% (rhs[, j] / (pmax(e$values, 0) + lam)))
+    as.vector(crossprod(Mtr, Pz)) - sum(Pz)                         # (M - 1)' P z
+  })
+  colnames(beta) <- traits; beta
+}
+```
+
+## ssGBLUP alternative (model test, 7 Nov 2026)
+
+You asked to test SNP-BLUP against ssGBLUP inside the breeding programme and keep the one with the
+higher response that does not need a much longer run time. The single-step version here uses the
+same training cows, the same fixed effects (breed x generation, herd x generation) and the same
+assumed heritabilities as SNP-BLUP, so the only differences are (1) `n_nongeno_ss` extra cows that
+have CFIT records but no genotypes enter through the pedigree, and (2) the pedigree itself.
+
+* H^-1^ = A^-1^ + [0, 0; 0, G~b~^-1^ - A~22~^-1^], with G~b~ = 0.95 (a + bG) + 0.05 A~22~ - the
+  compatibility method chosen in file 02 (`ssgblup_choice_*.csv`).
+* Animal-model mixed-model equations with λ = (1 - h^2^)/h^2^ per trait, solved with a sparse
+  Cholesky factor; the sparsity pattern is the same for all traits, so the factor is computed once and
+  only updated numerically per trait (`Matrix::update`).
+* Selection candidates (calves, bulls) are not in H. Their GEBVs come from SNP effects back-solved from
+  the genotyped training cows, u = Z'G~b~^-1^â~g~ / Σ2pq (Wang et al. 2012, *Genet Res* 94:73; the
+  "indirect prediction" route used in routine single-step evaluations). Because the returned SNP effects
+  are centred on the training allele frequencies, GEBVs differ from the SNP-BLUP scale by a constant per
+  trait, which does not change any ranking.
+
+```{r ssgblup_fn}
+ss_gblup <- function(Mtr, trn_g, trn_ng, ped_all, depth = 3) {
+  ids_g <- as.character(trn_g$id); ids_n <- as.character(trn_ng$id)
+  # pedigree traced `depth` generations back from all training cows
+  keep <- c(ids_g, ids_n); cur <- keep
+  for (d in seq_len(depth)) {
+    pp <- ped_all[id %in% cur]; par <- unique(na.omit(c(pp$sire, pp$dam)))
+    cur <- setdiff(par, keep); keep <- c(keep, cur); if (!length(cur)) break
+  }
+  P <- ped_all[id %in% keep, .(id, dam, sire)]
+  P[!(dam %in% id), dam := NA]; P[!(sire %in% id), sire := NA]
+  Pp <- nadiv::prepPed(as.data.frame(P))
+  Ainv <- nadiv::makeAinv(Pp)$Ainv; dimnames(Ainv) <- list(Pp[, 1], Pp[, 1])
+  # G (VanRaden 1) on the training cows' allele frequencies; A22^-1 by partition
+  p <- colMeans(Mtr) / 2; k2pq <- 2 * sum(p * (1 - p))
+  Z <- sweep(Mtr, 2, 2 * p); G <- tcrossprod(Z) / k2pq
+  oid <- setdiff(rownames(Ainv), ids_g)
+  L11 <- Matrix::Cholesky(forceSymmetric(Ainv[oid, oid]), LDL = FALSE)
+  A12 <- as.matrix(Ainv[oid, ids_g])
+  A22inv <- as.matrix(Ainv[ids_g, ids_g]) - crossprod(A12, as.matrix(solve(L11, A12)))
+  rm(L11, A12); A22 <- solve(A22inv)
+  b <- (mean(diag(A22)) - mean(A22)) / (mean(diag(G)) - mean(G)); a <- mean(A22) - b * mean(G)
+  Gb <- 0.95 * (a + b * G) + 0.05 * A22; rm(G, A22)
+  Gbi <- solve(Gb)
+  idx <- match(ids_g, rownames(Ainv)); ng <- length(idx)
+  Hinv <- Ainv + sparseMatrix(i = rep(idx, times = ng), j = rep(idx, each = ng), x = as.vector(Gbi - A22inv),
+                              dims = dim(Ainv))
+  rm(A22inv); invisible(gc())
+  # mixed-model equations: y = Xb + Za + e (records: genotyped + non-genotyped training cows)
+  dd <- rbind(trn_g[, c("id", "breed", "bg", "hg", traits), with = FALSE],
+              trn_ng[, c("id", "breed", "bg", "hg", traits), with = FALSE])
+  X <- sparse.model.matrix(~ factor(bg) + factor(hg), data = dd)
+  q <- qr(as.matrix(X)); X <- X[, q$pivot[seq_len(q$rank)], drop = FALSE]
+  Za <- sparseMatrix(i = seq_len(nrow(dd)), j = match(as.character(dd$id), rownames(Ainv)),
+                     x = 1, dims = c(nrow(dd), nrow(Ainv)))
+  WW <- cbind(X, Za); nx <- ncol(X)
+  CtC <- crossprod(WW)
+  Hpad <- bdiag(Matrix(0, nx, nx, sparse = TRUE), Hinv)
+  hh <- h2_mix(dd$breed)
+  Y <- as.matrix(dd[, ..traits]); rhs <- as.matrix(crossprod(WW, Y))
+  Lf <- NULL; u <- matrix(0, ncol(Mtr), nT)
+  for (j in seq_len(nT)) {
+    lam <- (1 - hh[j]) / hh[j]
+    C <- forceSymmetric(CtC + lam * Hpad)
+    Lf <- if (is.null(Lf)) Matrix::Cholesky(C, LDL = FALSE, super = TRUE) else update(Lf, C)
+    sol <- as.vector(solve(Lf, rhs[, j], system = "A"))
+    ahat <- sol[nx + idx]                                   # GEBV of genotyped training cows
+    u[, j] <- as.vector(crossprod(Z, Gbi %*% ahat)) / k2pq  # back-solved SNP effects
+  }
+  colnames(u) <- traits; u
+}
+```
+
+## Mate allocation with an inbreeding limit
+
+Expected progeny inbreeding = genomic coancestry of sire and dam = G~sd~ / 2, with G built
+from **base allele frequencies fixed at the end of burn-in**, so F is measured relative to
+that base. Greedy allocation: each dam (random order) gets the highest-index sire whose
+expected progeny F is below `r params$f_max` and who has not reached 2x his equal share of
+matings. If no sire qualifies, the sire with the lowest coancestry is used.
+
+```{r mate_fn}
+coancestry <- function(Ms, dpop, p0) {          # dpop: dam population, genotypes pulled in chunks
+  k <- 2 * sum(p0 * (1 - p0)); Zs <- sweep(Ms, 2, 2 * p0)
+  do.call(cbind, lapply(split(seq_len(nInd(dpop)), ceiling(seq_len(nInd(dpop)) / 2000)), function(ix)
+    tcrossprod(Zs, sweep(pullSnpGeno(dpop[ix], simParam = SP), 2, 2 * p0)) / k / 2))
+}
+allocate <- function(sire_idx, coan, n_mat, f_max, caps = NULL) {
+  ns <- length(sire_idx); used <- integer(ns)
+  cap <- if (is.null(caps)) rep(ceiling(2 * n_mat / ns), ns) else caps   # OCS passes its own caps
+  stopifnot(sum(cap) >= n_mat)
+  ord <- order(-sire_idx)
+  dams <- sample(rep_len(seq_len(ncol(coan)), n_mat))
+  plan <- matrix(NA_integer_, n_mat, 2)
+  for (k in seq_along(dams)) {
+    d <- dams[k]; ok <- ord[coan[ord, d] < f_max & used[ord] < cap[ord]]
+    s <- if (length(ok)) ok[1] else { av <- which(used < cap); av[which.min(coan[av, d])] }
+    used[s] <- used[s] + 1; plan[k, ] <- c(d, s)
+  }
+  list(plan = plan, expF = coan[cbind(plan[, 2], plan[, 1])])
+}
+```
+
+## Optimum contribution selection (scenario GS_NTM_NUE35_OCS)
+
+Following Meuwissen (1997, *J Anim Sci* 75:934), sire contributions **c** (summing to 1/2)
+maximise the expected merit of the next generation, **c**'**g**, subject to the group
+coancestry of all parents staying on a target path:
+
+C(**c**) = **c**'K~mm~**c** + 2 **c**'K~mf~**c**~f~ + **c**~f~'K~ff~**c**~f~ ≤ C\*~t~,
+with K = G/2 (genomic, base = end of burn-in) and fixed dam contributions **c**~f~.
+
+The target follows the definition of the rate of inbreeding,
+ΔF = (F~t+1~ - F~t~)/(1 - F~t~) (Falconer & Mackay), applied to coancestry:
+C\*~t~ = C\*~t-1~ + ΔF (1 - C\*~t-1~), with ΔF = `r params$ocs_dF` per generation.
+For comparison, the FAO guidelines for animal genetic resources target an effective size of
+at least 50, equivalent to ΔF = 1% per generation. The correction term of Wellmann & Pfeiffer
+(2009) for finite offspring numbers (of order 1/(4N)) is ignored, because N is ~10,000
+offspring per breed per generation.
+
+The problem is solved as a quadratic programme (`quadprog::solve.QP`): minimise
+**c**'K~mm~**c** + 2**c**'K~mf~**c**~f~ - θ**c**'**g** subject to Σ**c** = 1/2, **c** ≥ 0. θ is
+found by bisection as the largest value meeting the coancestry target. If even θ = 0
+(minimum coancestry) exceeds the target, that generation is logged as infeasible and the
+minimum-coancestry solution is used.
+
+```{r ocs_fn}
+# Zm: centred genotypes of candidate sires; zf: Z_d' c_f (female contribution summed over SNPs)
+ocs_solve <- function(g, Zm, zf, k, C_target) {
+  n <- length(g)
+  Kmm <- tcrossprod(Zm) / (2 * k) + diag(1e-6, n)
+  bm  <- as.vector(Zm %*% zf) / (2 * k)
+  Cff <- sum(zf^2) / (2 * k)
+  Amat <- cbind(rep(1, n), diag(n)); bv <- c(0.5, rep(0, n))
+  sol_theta <- function(th) {
+    x <- quadprog::solve.QP(Dmat = 2 * Kmm, dvec = th * g - 2 * bm, Amat = Amat,
+                            bvec = bv, meq = 1)$solution
+    x <- pmax(x, 0); x * 0.5 / sum(x)
+  }
+  Cof <- function(x) as.numeric(crossprod(x, Kmm %*% x)) + 2 * sum(x * bm) + Cff
+  x0 <- sol_theta(0)
+  if (Cof(x0) > C_target) return(list(c = x0, C = Cof(x0), feasible = FALSE, theta = 0))
+  lo <- 0; hi <- 1e-3
+  while (Cof(sol_theta(hi)) <= C_target && hi < 1e8) { lo <- hi; hi <- hi * 4 }
+  for (it in 1:40) { mid <- (lo + hi) / 2; if (Cof(sol_theta(mid)) <= C_target) lo <- mid else hi <- mid }
+  x <- sol_theta(lo)
+  list(c = x, C = Cof(x), feasible = TRUE, theta = lo)
+}
+# integer matings per sire from contributions (largest-remainder rounding, total = n_mat)
+contrib_to_caps <- function(cc, n_mat) {
+  raw <- cc / sum(cc) * n_mat; cap <- floor(raw)
+  rem <- n_mat - sum(cap); if (rem > 0) cap[order(-(raw - cap))[seq_len(rem)]] <- cap[order(-(raw - cap))[seq_len(rem)]] + 1
+  cap
+}
+# centred genotype cross-products, chunk-wise
+zt_c <- function(pop, cvec) Reduce(`+`, lapply(chunk_idx(nInd(pop)), function(ix)
+  as.vector(crossprod(sweep(pullSnpGeno(pop[ix], simParam = SP), 2, 2 * p0), cvec[ix]))))
+```
+
+# Run the programmes
+
+```{r run}
+# Memory-lean helpers: process genotypes in row chunks of 2,000 animals
+chunk_idx <- function(n, size = 2000) split(seq_len(n), ceiling(seq_len(n) / size))
+geno_colsums <- function(pop) Reduce(`+`, lapply(chunk_idx(nInd(pop)), function(ix)
+  colSums(pullSnpGeno(pop[ix], simParam = SP))))
+# base allele frequencies = end of burn-in, all animals of all breeds
+p0 <- Reduce(`+`, lapply(st$pop, geno_colsums)) / (2 * sum(sapply(st$pop, nInd)))
+invisible(gc()); memlog("p0 done")
+# genomic F relative to p0: diag(G) - 1, computed chunk-wise
+genomic_F <- function(pop) unlist(lapply(chunk_idx(nInd(pop)), function(ix) {
+  Z <- sweep(pullSnpGeno(pop[ix], simParam = SP), 2, 2 * p0)
+  rowSums(Z^2) / (2 * sum(p0 * (1 - p0))) - 1 }))
+# genomic EBV = (dosage - 1) %*% beta, chunk-wise
+gebv <- function(pop, beta) do.call(rbind, lapply(chunk_idx(nInd(pop)), function(ix)
+  (pullSnpGeno(pop[ix], simParam = SP) - 1) %*% beta))
+scen <- intersect(scen_req, names(W_idx))
+log_trend <- list(); log_beq <- list(); log_idx <- list(); log_F <- list(); log_ocs <- list(); log_time <- list()
+ped0 <- fread(file.path(params$sim_dir, "pedigree.csv"))[, .(id = as.character(id), sire = as.character(sire), dam = as.character(dam))]
+
+for (sc in scen) {
+  # label: OCS runs with a non-default rate of inbreeding get their own name
+  lab <- if (is_ocs(sc) && params$ocs_dF != 0.005) sprintf("%s_dF%g", sc, 100 * params$ocs_dF) else sc
+  set.seed(params$seed + params$rep_id)     # same random stream start for every scenario within a replicate
+  cur <- st$pop; hist_cows <- list(); prev_idx <- list(); C_star <- list()
+  # 8 Nov 2026 (memory, 7 GB machine): the genomes of past cows are kept on disk (uncompressed, in the
+  # R session's temporary folder) and read back only for the training set; phenotypes and herd blocks
+  # stay in memory. The same cows are read back, so results are unchanged.
+  hist_dir <- tempfile("hist_"); dir.create(hist_dir)
+  if (length(scen) == 1) st$pop <- NULL   # 8 Nov 2026 (memory): one scenario per run, the start population is not needed again
+  # 9 Nov 2026 (memory): PHENO has no genomic evaluation, so the burn-in cows (training set of the GS
+  # scenarios) are never used; they were freed only inside the GS branch and PHENO was killed (out of memory).
+  if (length(scen) == 1 && sc == "PHENO") { st$kept_cows <- NULL; invisible(gc()) }
+  ped_all <- copy(ped0); ped_new <- list()
+  for (g in seq_len(params$n_gs_gen)) {
+    gen <- burn_end + g
+    herd_z <- draw_herd_z(); nxt <- list()
+    if (sc != "PHENO") {   # one multi-breed SNP-BLUP per generation, forward training only
+    # training: cows of the previous two generations (forward only), stratified sample
+    tr_keys <- names(hist_cows)[as.integer(sub(" .*", "", names(hist_cows))) %in% (g - 2):(g - 1)]
+    if (!length(tr_keys)) {                          # first GS generation: burn-in cows
+      trn <- phen0[generation %in% (burn_end - 1):burn_end]
+      # 8 Nov 2026 (memory, 7 GB machine): the id order of the merged population is taken from the id
+      # vectors, and each generation is subset to the sampled cows before merging. Same sample, same order.
+      kp <- unname(st$kept_cows[paste(c(burn_end - 1, burn_end), rep(breeds, each = 2))])
+      ids <- intersect(as.character(trn$id), unlist(lapply(kp, function(p) p@id)))
+      ids <- sample(ids, min(length(ids), params$n_train_total))
+      trpop <- do.call(c, lapply(kp, function(p) p[p@id %in% ids])); rm(kp)
+      Mtr <- pullSnpGeno(trpop[match(ids, trpop@id)], simParam = SP)   # subset first (memory)
+      trn_ng <- trn[!(as.character(id) %in% ids)]          # phenotyped, not in the genotyped sample
+      trn <- trn[match(as.integer(ids), id)]
+      Ytr <- as.matrix(trn[, ..traits]); Xdf <- trn[, .(breed, bg = paste(breed, generation),
+                                                        hg = paste(herd, generation))]
+      trn_ng[, `:=`(bg = paste(breed, generation), hg = paste(herd, generation))]
+    } else {
+      parts <- lapply(tr_keys, function(k) {
+        h <- hist_cows[[k]]; data.table(id = h$id, breed = sub(".* ", "", k),
+                                        bg = k, hg = paste(h$blk$herd, sub(" .*", "", k)), h$P) })
+      trn <- rbindlist(parts)
+      take <- sample(nrow(trn), min(nrow(trn), params$n_train_total))
+      trn_ng <- trn[-take]; trn <- trn[take]
+      trpop <- do.call(c, lapply(tr_keys, function(k) { hp <- readRDS(hist_cows[[k]]$file); hp[hp@id %in% trn$id] }))   # 8 Nov 2026: subset before merging (memory); match() below fixes the order
+      Mtr <- pullSnpGeno(trpop[match(trn$id, trpop@id)], simParam = SP)   # subset first (memory)
+      Ytr <- as.matrix(trn[, ..traits]); Xdf <- trn[, .(breed, bg, hg)]
+    }
+    rm(trpop); if (length(scen) == 1) st$kept_cows <- NULL; invisible(gc())   # 8 Nov 2026: free genomes before the evaluation (memory)
+    memlog(paste("gen", g, "training matrix ready"))
+    t_ev <- Sys.time()
+    if (eval_model == "ssGBLUP") {
+      trn_ng <- trn_ng[sample(.N, min(.N, params$n_nongeno_ss))]
+      beta_g <- ss_gblup(Mtr, cbind(trn[, .(id = as.character(id))], Xdf, as.data.table(Ytr)),
+                         trn_ng[, c("id", "breed", "bg", "hg", traits), with = FALSE][, id := as.character(id)], ped_all)
+    } else beta_g <- snp_blup(Mtr, Ytr, Xdf)
+    log_time[[paste(lab, g)]] <- data.table(scenario = lab, generation = gen, eval_model = eval_model,
+      n_geno = nrow(Mtr), n_nongeno = if (eval_model == "ssGBLUP") nrow(trn_ng) else 0L,
+      eval_sec = as.numeric(difftime(Sys.time(), t_ev, units = "secs")))
+    rm(Mtr, Ytr); invisible(gc()); memlog(paste("gen", g, "evaluation done"))
+    }
+    for (b in breeds) {
+      pop <- cur[[b]]
+      cows  <- pop[pop@sex == "F"]; cows <- cows[seq_len(min(n_cow[[b]], nInd(cows)))]
+      bulls <- pop[pop@sex == "M"]
+      blk <- assign_blocks(nInd(cows), gen, b); P <- make_pheno(cows, b, blk, herd_z)
+      Gg_c <- goal_G(cows); Gg_b <- goal_G(bulls)
+      wv <- W_idx[[sc]][[b]]                                      # breed-specific weights
+      Hc <- as.vector(sweep(Gg_c, 2, sdA0, `/`) %*% wv)   # true index value
+      Hb <- as.vector(sweep(Gg_b, 2, sdA0, `/`) %*% wv)
+      hfile <- file.path(hist_dir, paste0(g, "_", b, ".rds")); saveRDS(cows, hfile, compress = FALSE)
+      hist_cows[[paste(g, b)]] <- list(file = hfile, id = cows@id, P = P, blk = blk)
+
+      # ---- selection criterion ----
+      if (sc == "PHENO") {
+        Pc <- as.data.table(P)[, herd := blk$herd]
+        Pc <- Pc[, (traits) := lapply(.SD, function(x) x - mean(x)), by = herd, .SDcols = traits]
+        # phenotypic NTM index: herd-corrected phenotypes on the genetic-SD scale x NTM weights
+        crit_c <- as.vector(sweep(as.matrix(Pc[, ..traits]), 2, sdA0, `/`) %*% wv); names(crit_c) <- cows@id
+        crit_b <- if (is.null(prev_idx[[b]])) runif(nInd(bulls)) else prev_idx[[b]][bulls@mother]
+        crit_b[is.na(crit_b)] <- 0; prev_idx[[b]] <- crit_c
+      } else {
+        ebv_c <- gebv(cows, beta_g)
+        ebv_b <- gebv(bulls, beta_g)
+        crit_c <- as.vector(sweep(ebv_c, 2, sdA0, `/`) %*% wv)
+        crit_b <- as.vector(sweep(ebv_b, 2, sdA0, `/`) %*% wv)
+        # index correlations: each trait's EBV with the estimated index
+        log_idx[[paste(lab, g, b)]] <- data.table(scenario = lab, generation = gen, breed = b,
+          trait = traits, cor_EBV_index = as.vector(cor(ebv_c, crit_c)),
+          cor_TBV_goal = as.vector(cor(Gg_c, Hc)), acc_trait = diag(cor(ebv_c, Gg_c)))
+      }
+
+      # ---- truncation selection ----
+      n_dam <- round(params$dam_prop * nInd(cows)); n_elite <- round(params$elite_dam_prop * nInd(cows))
+      o_c <- order(-crit_c); dams <- cows[o_c[seq_len(n_dam)]]; elite <- cows[o_c[seq_len(n_elite)]]
+      sires <- bulls[order(-crit_b)[seq_len(sires_n[[b]])]]
+      sel_b <- order(-crit_b)[seq_len(sires_n[[b]])]
+      w_b <- rep(1 / length(sel_b), length(sel_b))        # sire weights (equal use)
+      if (is_ocs(sc)) {
+        kk <- 2 * sum(p0 * (1 - p0))
+        if (is.null(C_star[[b]])) {                      # C*_0 = current mean coancestry
+          zall <- zt_c(cows, rep(0.5 / nInd(cows), nInd(cows))) + zt_c(bulls, rep(0.5 / nInd(bulls), nInd(bulls)))
+          C_star[[b]] <- sum(zall^2) / (2 * kk)
+        }
+        C_star[[b]] <- C_star[[b]] + params$ocs_dF * (1 - C_star[[b]])
+        cand <- order(-crit_b)[seq_len(min(params$ocs_n_cand, nInd(bulls)))]
+        cf <- 0.25 / n_dam + 0.25 * (seq_len(n_dam) <= n_elite) / n_elite   # dams sorted: elite first
+        zf <- zt_c(dams, cf)
+        Zm <- sweep(pullSnpGeno(bulls[cand], simParam = SP), 2, 2 * p0)
+        oc <- ocs_solve(crit_b[cand], Zm, zf, kk, C_star[[b]])
+        keep <- oc$c > 1e-5
+        sel_b <- cand[keep]; w_b <- oc$c[keep] / sum(oc$c[keep])
+        sires <- bulls[sel_b]
+        log_ocs[[paste(lab, g, b)]] <- data.table(scenario = lab, generation = gen, breed = b,
+          C_target = C_star[[b]], C_achieved = oc$C, feasible = oc$feasible,
+          n_sires_used = sum(keep), max_share = max(w_b), theta = oc$theta)
+        rm(Zm); invisible(gc())
+      }
+
+      # ---- breeder's equation (index scale) ----
+      r_m <- cor(crit_b, Hb); r_f <- cor(crit_c, Hc)
+      i_m <- (sum(w_b * crit_b[sel_b]) - mean(crit_b)) / sd(crit_b)   # contribution-weighted
+      i_f <- (mean(crit_c[o_c[seq_len(n_dam)]]) - mean(crit_c)) / sd(crit_c)     # dams of daughters
+      i_fe <- (mean(crit_c[o_c[seq_len(n_elite)]]) - mean(crit_c)) / sd(crit_c)  # dams of sons (elite)
+      log_beq[[paste(lab, g, b)]] <- data.table(scenario = lab, generation = gen, breed = b,
+        p_male = length(sel_b) / nInd(bulls), p_female = n_dam / nInd(cows),
+        i_male_theory = trunc_i(length(sel_b) / nInd(bulls)), i_male_obs = i_m,
+        i_female_theory = trunc_i(n_dam / nInd(cows)), i_female_obs = i_f,
+        S_male = sum(w_b * crit_b[sel_b]) - mean(crit_b), S_female = mean(crit_c[o_c[seq_len(n_dam)]]) - mean(crit_c),
+        r_male = r_m, r_female = r_f, sdH_male = sd(Hb), sdH_female = sd(Hc),
+        i_elite_theory = trunc_i(n_elite / nInd(cows)), i_elite_obs = i_fe,
+        # four-path equation (Rendel & Robertson 1950), discrete generations (L = 1):
+        # sires of sons = sires of daughters; dams of sons = elite tier; dams of daughters = dam tier
+        dG_expected = (2 * i_m * r_m * sd(Hb) + (i_fe + i_f) * r_f * sd(Hc)) / 4,
+        meanH = mean(c(Hb, Hc)))
+
+      # ---- trends (all traits) ----
+      Gown <- own_country_G(cows, blk$country); colnames(Gown) <- traits
+      log_trend[[paste(lab, g, b)]] <- data.table(scenario = lab, generation = gen, breed = b,
+        trait = traits, mean_G = colMeans(Gown), var_G = apply(Gown, 2, var),
+        mean_P = colMeans(P), var_P = apply(P, 2, var))
+
+      # ---- mating ----
+      nf <- n_cow[[b]]
+      if (is_mate(sc)) {
+        Ms <- pullSnpGeno(sires, simParam = SP)
+        coanF <- coancestry(Ms, dams, p0)
+        coanM <- coancestry(Ms, elite, p0)
+        caps <- if (is_ocs(sc)) contrib_to_caps(w_b, 2 * nf) else NULL
+        aF <- allocate(crit_b[sel_b], coanF, 2 * nf, params$f_max, caps)
+        aM <- allocate(crit_b[sel_b], coanM, 2 * nf, params$f_max, caps)
+        fem  <- makeCross2(dams,  sires, aF$plan, nProgeny = 1)
+        male <- makeCross2(elite, sires, aM$plan, nProgeny = 1)
+        expF <- mean(c(aF$expF, aM$expF))
+      } else {
+        fem  <- randCross2(dams,  sires, nCrosses = 2 * nf, nProgeny = 1)
+        male <- randCross2(elite, sires, nCrosses = 2 * nf, nProgeny = 1)
+        Ms <- pullSnpGeno(sires, simParam = SP)
+        expF <- mean(coancestry(Ms, dams, p0))
+      }
+      # AlphaSimR sexes are systematic (half F, half M): 2*nf crosses per path,
+      # daughters kept from the dam path, sons from the elite-dam path
+      nxt[[b]] <- c(fem[fem@sex == "F"], male[male@sex == "M"]); rm(fem, male)
+      memlog(paste("gen", g, b, "offspring made"))
+      ped_new[[b]] <- data.table(id = nxt[[b]]@id, sire = nxt[[b]]@father, dam = nxt[[b]]@mother)
+      # genomic inbreeding of the new generation relative to the burn-in base
+      F_g <- genomic_F(nxt[[b]])
+      log_F[[paste(lab, g, b)]] <- data.table(scenario = lab, generation = gen + 1, breed = b,
+                                             F_genomic = mean(F_g), expected_F = expF)
+      # 8 Nov 2026 (memory): this breed's parent generation is no longer needed (its cows stay in hist_cows)
+      cur[b] <- list(NULL); rm(pop, cows, bulls, dams, elite, sires); invisible(gc())
+    }
+    cur <- nxt
+    ped_all <- rbind(ped_all, rbindlist(ped_new)); ped_new <- list()
+    # keep only the last two generations of cows (all that training uses)
+    old <- as.integer(sub(" .*", "", names(hist_cows))) < g - 1
+    for (k in names(hist_cows)[old]) unlink(hist_cows[[k]]$file)
+    hist_cows[old] <- NULL; invisible(gc())
+    progress(sc, " gen ", gen, " done ", format(Sys.time() - t0))
+  }
+}
+trend <- rbindlist(log_trend); beq <- rbindlist(log_beq)
+idx <- rbindlist(log_idx); Fdt <- rbindlist(log_F); ocs <- rbindlist(log_ocs); ev_time <- rbindlist(log_time)
+```
+
+# Response to selection: breeder's equation
+
+Expected change per generation on the true index scale, four-path equation
+(Rendel & Robertson 1950) with discrete generations (L = 1 on every path):
+ΔG~exp~ = [2 i~m~ r~m~ σ~H,m~ + (i~DS~ + i~DD~) r~f~ σ~H,f~] / 4, where the same sires breed sons
+and daughters, i~DS~ is the intensity on the elite dams of sons (top `r params$elite_dam_prop*100`%)
+and i~DD~ on the dams of daughters (top `r params$dam_prop*100`%).
+Observed ΔG = change in the mean true index of candidates from one generation to the next.
+
+```{r beq}
+beq[, dG_observed := shift(meanH, type = "lead") - meanH, by = .(scenario, breed)]
+kable(beq[, .(i_m_theory = mean(i_male_theory), i_m_obs = mean(i_male_obs),
+              i_DS_obs = mean(i_elite_obs), i_DD_obs = mean(i_female_obs),
+              r_m = mean(r_male), r_f = mean(r_female),
+              dG_exp = mean(dG_expected), dG_obs = mean(dG_observed, na.rm = TRUE)),
+          by = .(scenario, breed)], digits = 3,
+      caption = "Averages over generations (index in standardised genetic units)")
+ggplot(beq[!is.na(dG_observed)], aes(dG_expected, dG_observed, colour = scenario)) +
+  geom_abline(lty = 2) + geom_point() + facet_wrap(~breed) + theme_bw() +
+  labs(title = "Observed vs expected response per generation")
+```
+
+**Expectation:** observed < expected over time, because the breeder's equation ignores the
+loss of genetic variance from selection (Bulmer effect), drift and inbreeding.
+
+# Population performance over time (burn-in + selection)
+
+```{r trends, fig.width=11, fig.height=8}
+tr_all <- rbind(
+  rbindlist(lapply(scen, function(s) cbind(scenario = s, trend0))),
+  trend, fill = TRUE)
+long <- melt(tr_all[trait %in% c("MY", "NUE", "MUN", "SF", "CH4", "ICF")],
+             id.vars = c("scenario", "generation", "breed", "trait"))
+ggplot(long[breed == "HOL"], aes(generation, value, colour = scenario)) +
+  geom_line() + geom_vline(xintercept = burn_end + 0.5, lty = 3) +
+  facet_grid(variable ~ trait, scales = "free_y") + theme_bw() +
+  labs(title = "Holstein: mean and variance of genetic (G) and phenotypic (P) values",
+       subtitle = "dotted line = start of genomic selection", y = "standardised units")
+```
+
+```{r nue_trend}
+kable(dcast(trend[trait %in% c("NUE", "MUN", "MY", "SF", "CH4") & generation == max(generation)],
+            breed + trait ~ scenario, value.var = "mean_G"), digits = 3,
+      caption = "Mean genetic value in the final generation (genetic SD units of the founders)")
+```
+
+# Multi-trait information over cycles: correlation with the index
+
+```{r idx_cor, fig.width=10, fig.height=4}
+if (nrow(idx) == 0) cat("No genomic EBVs in this run (PHENO scenario only) - nothing to show.\n") else print(
+ggplot(idx[breed == "HOL"], aes(generation, cor_EBV_index, colour = trait)) +
+  geom_line() + facet_wrap(~scenario) + theme_bw() +
+  labs(y = "cor(EBV of trait, index)", title = "How strongly each trait drives the index (Holstein)"))
+if (nrow(idx)) kable(dcast(idx[, .(acc = mean(acc_trait)), by = .(scenario, trait)], trait ~ scenario,
+            value.var = "acc"), digits = 3, caption = "Mean accuracy of genomic EBV per trait")
+```
+
+# Inbreeding and the mating plan
+
+```{r inbreeding}
+ggplot(Fdt, aes(generation, F_genomic, colour = scenario)) + geom_line() +
+  geom_hline(yintercept = params$f_max, lty = 2) + facet_wrap(~breed) + theme_bw() +
+  labs(y = "mean genomic F (relative to end of burn-in)")
+kable(Fdt[generation == max(generation)], digits = 4)
+```
+
+**Reading the inbreeding results.** The F < `r params$f_max` limit in GS_NTM_NUE35_MATE applies to
+the *expected inbreeding of each mating*. It does not limit the *rate* of inbreeding of the
+population, which is set mainly by how many sires are used and how related they are. With
+about one sire per 200 cows and truncation selection on GEBV, selected bulls cluster in few
+families. If mean F rises well above `r params$f_max` in every scenario, mate allocation alone
+cannot meet the target. The established remedy is **optimum contribution selection**
+(Meuwissen 1997, *J Anim Sci* 75:934), which chooses sires *and* their number of matings to
+maximise genetic gain subject to a fixed rate of coancestry increase. It is the next step to
+implement in this pipeline, not something the current results show to be satisfied.
+
+## Optimum contribution selection diagnostics
+
+```{r ocs_diag}
+if (nrow(ocs)) {
+  kable(ocs, digits = 4, caption = "OCS per generation: coancestry target vs achieved, feasibility, sires used, largest sire share")
+  print(ggplot(ocs, aes(generation)) + geom_line(aes(y = C_target), lty = 2) +
+          geom_line(aes(y = C_achieved, colour = breed)) + theme_bw() +
+          labs(y = "group coancestry of parents", subtitle = "dashed = target path"))
+} else cat("OCS scenario not run in this render.\n")
+```
+
+# Recommended mating plan (final generation)
+
+The allocation actually used in the last generation of `GS_NTM_NUE35_MATE` is reported per breed:
+number of sires used, matings per sire, and the expected progeny inbreeding.
+
+```{r plan}
+kable(Fdt[scenario == "GS_NTM_NUE35_MATE", .(mean_expected_F = mean(expected_F)), by = breed], digits = 4)
+```
+
+# Save
+
+```{r save}
+tag <- paste(scen, collapse = "_")
+if (length(scen) == 1 && is_ocs(scen) && params$ocs_dF != 0.005) tag <- lab
+if (params$eval_model != "auto") tag <- paste0(tag, "_", eval_model)   # model-test runs carry the model name
+if (params$rep_id > 0) tag <- paste0(tag, "_rep", params$rep_id)
+if (nrow(ev_time)) fwrite(ev_time, file.path(params$sim_dir, paste0("gs_eval_time_", tag, ".csv")))
+fwrite(trend, file.path(params$sim_dir, paste0("gs_trend_", tag, ".csv")))
+fwrite(beq,   file.path(params$sim_dir, paste0("gs_breeders_equation_", tag, ".csv")))
+fwrite(idx,   file.path(params$sim_dir, paste0("gs_index_correlations_", tag, ".csv")))
+fwrite(Fdt,   file.path(params$sim_dir, paste0("gs_inbreeding_", tag, ".csv")))
+if (nrow(ocs)) fwrite(ocs, file.path(params$sim_dir, paste0("gs_ocs_", tag, ".csv")))
+fwrite(data.table(trait = traits, sdA0 = sdA0), file.path(params$sim_dir, "gs_sdA0.csv"))   # standardisation constants (same in every run)
+cat("Run time:", format(Sys.time() - t0), "\n")
+```
+
+```{r session}
+sessionInfo()
+```

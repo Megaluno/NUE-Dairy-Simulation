@@ -1,0 +1,2 @@
+winner,reason,mean_diff_acc_MF_minus_pooled,se_diff,focus_traits
+ssGBLUP_MF,accuracies equal within 1 SE; slope closer to 1,0.00032777197369746,0.000439833065319233,SF

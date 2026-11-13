@@ -1,0 +1,14 @@
+t1,t2,rg,se,status,trait_definition_in_source,population,source,read
+DMI,CH4,0.65,0.10,PROXY,daily DMI vs daily enteric CH4 (production) - model CH4 is breath concentration,"Norwegian Red, 2,074 cows",Bakke & Heringstad 2024 Interbull Bull 60:78-85 (abstract),abstract
+ICF,CH4,0.17,0.13,PROXY (Danish HOL),interval calving-first insemination vs CH4 production (sniffer),"Danish Holstein, 1,397 CH4 cows",Zetouni et al. 2018 J Dairy Sci 101:2273-2280 Table 5,full text
+SCS,CH4,0.06,0.19,PROXY,udder health (mastitis 0-50 d) not SCS,"Danish Holstein",Zetouni et al. 2018 Table 5,full text
+DMI,ICF,0.26,,PROXY (sign inferred),correlation of DMI EBV with fertility index (-0.26); index high = good fertility,"Norwegian Red",Bakke & Heringstad 2024 (abstract),abstract
+MY,LNVAR,0.64,,PROXY,LnVar (quantile regression) vs official 305-d milk yield; MACE correlation,"Dutch Holstein AMS, 198,754 cows",Poppe et al. 2020 J Dairy Sci 103:1667-1684 Table 2.6 (moving average: 0.62),full text (thesis ch.)
+SCS,LNVAR,0.32,,PROXY (sign inferred),LnVar vs udder health index (-0.32); UH index high = fewer udder problems,"Dutch Holstein",Poppe et al. 2020 Table 2.6 (moving average: -0.27),full text
+ICF,LNVAR,0.40,,PROXY (sign inferred),LnVar vs fertility index (-0.40),"Dutch Holstein",Poppe et al. 2020 Table 2.6 (moving average: -0.35),full text
+LONG,LNVAR,-0.16,,PROXY,LnVar vs productive longevity,"Dutch Holstein",Poppe et al. 2020 Table 2.6 (moving average: -0.14),full text
+DMI,LNVAR,0.24,,PROXY,LnVar vs DMI index,"Dutch Holstein",Poppe et al. 2020 Table 2.6 (moving average: 0.26),full text
+MY,FR,0.21,,PROXY (non-EU),feeding rate vs milk energy,"US Holstein, 1,328 cows",Cavani et al. 2022 J Dairy Sci 105:7564-7574 (abstract),abstract
+PY,FR,0.21,,PROXY (non-EU),feeding rate vs milk energy (same value as MY),"US Holstein",Cavani et al. 2022 (abstract),abstract
+DMI,NUE,0.08,0.23,PROXY,NUEtot vs nitrogen intake (DMI x diet CP),"Irish grazing HF, 1,291 cows",Tavernier et al. 2024 J Dairy Sci 107:2231-2240 Table 2,full text
+PY,MUN,"0.16 / 0.04 / 0.10","0.02 / 0.02 / 0.03",PROXY,MU vs protein PERCENT (HOL / JER / RDC),"Danish HOL/JER/RDC",Buitenhuis & Poulsen 2023 Table 3,full text

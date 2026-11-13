@@ -1,0 +1,7 @@
+/sim_*/
+/founders/
+/logs/
+*.rds
+!params/*.rds
+.Rhistory
+.RData

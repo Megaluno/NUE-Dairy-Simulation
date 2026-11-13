@@ -1,0 +1,56 @@
+t1,t2,candidate_rg (SE),note,tier,source
+MY,PY,0.86,,X,NAV May 2024 (in model)
+MY,DMI,0.62 (0.32) | 0.64 (0.35),,B,"ECM-DMI, Nordic Red: Liinamo 2012 JDS 95:6788 Table 2 | Lidauer 2023 Animal 17:100917 Table 3"
+PY,DMI,0.62 (0.32) | 0.64 (0.35),,B,same ECM-DMI estimates as MY-DMI (no protein-yield estimate)
+MY,FR,0.21,,B,"feeding rate vs milk energy, US Holstein: Cavani 2022 JDS 105:7564"
+PY,FR,0.21,,B,same milk-energy estimate
+MY,SCS,+0.18 (0.05),sign flipped from MY-udder health index -0.18,C,"Chen 2021 JDS 104:4413 Table 4 (Walloon Holstein bulls, Blanchard approx.)"
+PY,SCS,0.11 (0.04),,B,Iranian Holstein test-day: Kheirabadi & Razmkabir 2016 J Anim Sci Technol 58:38 (non-EU)
+MY,ICF,+0.46 (0.04),sign flipped from MY-female fertility index -0.46,C,Chen 2021 Table 4
+PY,ICF,,,NONE,
+MY,LONG,-0.05 (0.05),,C,Chen 2021 Table 4; literature range -0.5 to +0.43 (Hu et al. 2021 Front Genet review)
+PY,LONG,+0.41,sign flipped from culling-PY -0.41,B,Norwegian Red 1st lactation: Holtsmark et al. 2008 JDS 91:4006 (abstract)
+MY,LNVAR,0.64 (QR) / 0.62 (MA),,C,Dutch HOL MACE: Poppe et al. 2020 JDS 103:1667 Table 2.6
+PY,LNVAR,,,NONE,
+MY,MUN,-0.10,Danish weighted mean; Polish HF +0.24 (Rzewuska 2013) conflicts,X,Buitenhuis & Poulsen 2023 (in model)
+PY,MUN,0.19 (0.10),"protein YIELD, lactation 1 mean; Danish estimate exists only for protein %",B,Polish HF: Rzewuska & Strabel 2013 J Appl Genet 54:473 Table 3
+MY,NUE,0.52,Chen 2021 approx. 0.47 (0.06),X,Tavernier 2024 (in model)
+PY,NUE,0.80,Chen 2021 approx. 0.42 (0.06),X,Tavernier 2024 (in model)
+MY,CH4,0.33,,X,Schneider 2025 (in model)
+PY,CH4,0.46,,X,Schneider 2025 (in model)
+DMI,FR,0.69,,X,Cavani 2022 (in model)
+DMI,SCS,+0.10,sign flipped from DMI EBV vs udder health / mastitis index -0.10,C,Norwegian Red: Bakke & Heringstad 2024 Interbull Bull 60 Table 4 (Spearman EBV-index)
+DMI,ICF,+0.26,sign flipped from DMI EBV vs fertility index -0.26,C,Bakke & Heringstad 2024 Table 4
+DMI,LONG,,only MBW index-longevity 0.18 HOL / 0.20 RDC (Lidauer 2019 Interbull Table 4),NONE,
+DMI,LNVAR,0.24 (QR) / 0.26 (MA),,C,Poppe 2020 Table 2.6
+DMI,MUN,,,NONE,
+DMI,NUE,0.08 (0.23),NUEtot vs N intake,B,Tavernier 2024 Table 2
+DMI,CH4,0.65 (0.10),"CH4 production (g/d), model trait is concentration; Swedish Red 0.48 (0.64) Chipondoro 2024 MSc",B,Norwegian Red: Bakke & Heringstad 2024 Table 3
+FR,SCS,,,NONE,
+FR,LNVAR,,,NONE,
+FR,ICF,,,NONE,
+FR,LONG,,,NONE,
+FR,MUN,,,NONE,
+FR,NUE,,,NONE,
+FR,CH4,,,NONE,
+SCS,LNVAR,+0.32 (QR) / +0.27 (MA),sign flipped from LnVar-udder health index,C,Poppe 2020 Table 2.6
+SCS,ICF,,"favourable (positive in our signs) per Nordic multi-trait study, value not obtained (PubMed 21554411)",NONE,
+SCS,LONG,-0.20,sign flipped from culling-SCS 0.20,B,Norwegian Red: Holtsmark 2008 (abstract)
+SCS,MUN,-0.14 (0.11),lactation 1 mean,B,Polish HF: Rzewuska & Strabel 2013 Table 3
+SCS,NUE,+0.29 (0.07),sign flipped from PNUE1-udder health -0.29,C,Chen 2021 Table 4
+SCS,CH4,0.06 (0.19),udder health (mastitis 0-50 d) vs CH4 production; Bakke EBV-index gives +0.14,B,Danish HOL: Zetouni 2018 JDS 101:2273 Table 5
+LNVAR,ICF,+0.40 (QR) / +0.35 (MA),sign flipped from LnVar-fertility index,C,Poppe 2020 Table 2.6
+LNVAR,LONG,-0.16 (QR) / -0.14 (MA),,C,Poppe 2020 Table 2.6
+LNVAR,MUN,,,NONE,
+LNVAR,NUE,,,NONE,
+LNVAR,CH4,,,NONE,
+ICF,LONG,-0.15,sign flipped from culling-ICF 0.15,B,Norwegian Red: Holtsmark 2008 (abstract)
+ICF,MUN,"-0.06 to 0.14 (daily, no mean)","Konig 2008 (German HOL, cited) 0.29",B,Polish HF: Rzewuska & Strabel 2015 Anim Sci Pap Rep 33:243 Fig 2
+ICF,NUE,+0.44 (0.07),sign flipped from PNUE1-female fertility -0.44,C,Chen 2021 Table 4
+ICF,CH4,0.17 (0.13),CH4 production; Bakke EBV-index gives +0.22,B,Danish HOL: Zetouni 2018 Table 5
+LONG,MUN,,,NONE,
+LONG,NUE,-0.33 (0.08),PNUE1 vs longevity,C,Chen 2021 Table 4
+LONG,CH4,,only CH4 EBV vs total merit -0.07 (Bakke),NONE,
+MUN,NUE,-0.12,,X,Tavernier 2024 (in model)
+MUN,CH4,,,NONE,
+NUE,CH4,,,NONE,

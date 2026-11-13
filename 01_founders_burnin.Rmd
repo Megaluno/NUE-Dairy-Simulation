@@ -1,0 +1,409 @@
+---
+title: "01 - Coalescent founders, 3 breeds x 4 countries, phenotypic burn-in"
+author: "Prepared for Emmanuel Ismaila"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    code_folding: show
+params:
+  run_mode: "TEST"      # "TEST" = small quick check; "FULL" = 28,400 cows per generation
+  gxe_rg: 1.0           # between-country genetic correlation: 1.0 (NAV assumption) or 0.9 (sensitivity)
+  seed: 20261031
+  param_set: "main"     # parameter set: "main"; NUE sensitivity "NUEx0" / "NUEx05" (correlations); "SFh008" (Saved Feed h2 0.08)
+  rep_id: 0             # founder-population replicate (7 Nov 2026): seed = seed + rep_id; output folder gets _rep<r> for r > 0
+  founders_only: FALSE  # TRUE = run only the MaCS founder step and cache it (8 Nov 2026: splits the work into two steps that each fit the 2-hour run window)
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+suppressPackageStartupMessages({
+  library(AlphaSimR); library(data.table); library(ggplot2); library(knitr)
+})
+set.seed(params$seed + params$rep_id)
+t0 <- Sys.time()
+```
+
+# What this file does
+
+1. Simulates founder haplotypes with the coalescent simulator MaCS (via AlphaSimR), using
+   AlphaSimR's built-in **CATTLE** demographic history (MacLeod et al. 2013, *Mol Biol Evol*,
+   doi:10.1093/molbev/mst125), extended to **three breeds** that split from a common
+   ancestral population.
+2. Sets global simulation parameters: 29 autosomes (the bovine autosome number), **about 10,000 SNPs**
+   (345 per chromosome; your choice 8 Nov 2026, so the run fits this machine; the 50k version is kept in hpc/ for the cluster),
+   10 genetically correlated traits with breed-specific heritabilities from `00_genetic_parameters.Rmd`.
+3. Builds the 28,400-cow CFIT structure (Lassen & Borchersen, CFIT slides; file 00): breed x country cows and 40 single-breed herds, and a recorded pedigree.
+4. Runs a **phenotypic burn-in** (conventional selection) before genomic selection starts in file 04.
+
+Mode: **`r params$run_mode`** | between-country r~g~: **`r params$gxe_rg`**
+
+# Inputs
+
+```{r inputs}
+h2    <- fread(if (params$param_set == "SFh008") "params/h2_SFh008.csv" else "params/h2.csv")
+# param_set (sensitivity analyses, file 00): NUEx0 / NUEx05 change the correlations, SFh008 the Saved Feed h2
+RG    <- readRDS(if (params$param_set %in% c("NUEx0", "NUEx05")) sprintf("params/RG_matrix_%s.rds", params$param_set) else "params/RG_matrix.rds")
+split <- fread("params/breed_country_split.csv")
+traits    <- h2$code
+nT        <- length(traits)
+breeds    <- c("HOL", "RDC", "JER")
+countries <- unique(split$country)            # DNK, SWE, FIN, DEU (file 00)
+herds_tab <- fread("params/herds.csv")       # 40 single-breed herds per breed x country (file 00, 7 Nov 2026)
+nC        <- length(countries)
+kable(h2[, .(code, HOL, RDC, JER, status)])
+```
+
+# Design choices (not taken from literature, flagged)
+
+Every number below is a modelling decision. None is presented as an empirical estimate.
+
+```{r design}
+FULL <- params$run_mode == "FULL"
+design <- list(
+  n_founder_per_breed = if (FULL) 600 else 150,   # founder individuals per breed from MaCS
+  scale               = if (FULL) 1 else 0.05,    # TEST mode = 5% of 28,400 cows
+  n_chr               = 29,                       # bovine autosomes (7 Nov 2026; was 10)
+  seg_sites_per_chr   = 2500,                     # candidate segregating sites kept per chr (>= SNP + QTL)
+  snp_per_chr         = 345,                      # 29 x 345 = 10,005 SNP (your choice 8 Nov 2026; 50k planned for the cluster; was 10 x 500)
+  qtl_per_chr         = 100,                      # 2,900 QTL per trait, non-overlapping with SNP
+  split_gen_HOL_RDC   = 30,                       # generations ago, HOL and RDC lineages join
+  split_gen_JER       = 50,                       # generations ago, JER joins the others
+  herds               = nrow(herds_tab),          # 39 CFIT farms scaled to 40 (file 00)
+  herd_var_prop       = 0.15,                     # herd-generation variance as share of base var(P)
+  n_burnin_gen        = 10,                       # generations of phenotypic selection
+  sires_per_breed     = round(setNames(split[, sum(n), by = breed]$V1, split[, sum(n), by = breed]$breed) / 200),  # 1 sire per 200 cows
+  dam_prop            = 0.80                      # proportion of cows kept as dams
+)
+kable(data.table(parameter = names(design),
+                 value = sapply(design, function(x) paste(x, collapse = " / ")),
+                 basis = c("compute budget", "compute budget", "compute budget", "brief",
+                           "choice", "assumption: breed formation ~ 19th century (not a published estimate)",
+                           "assumption (as above)", "CFIT: 39 farms (12 RDC, 11 JER, 16 HOL) scaled to 40, largest remainder (file 00; your choice)",
+                           "assumption; herd fitted as fixed block downstream",
+                           "choice", "assumption: 1 sire per 200 cows (no public sire numbers found)", "assumption")))
+n_breed <- split[, .(n = sum(n)), by = breed]
+n_breed[, n_sim := round(n * design$scale)]
+n_breed
+```
+
+# Founder genomes: coalescent with a three-breed split
+
+The command below is AlphaSimR's own CATTLE command (copied from `runMacs()` source,
+AlphaSimR `r packageVersion("AlphaSimR")`), with the two-population split replaced by
+three islands (`-I 3`) that join backwards in time (`-ej`). MaCS time is in units of 4N~e~ generations.
+
+```{r macs}
+nB      <- design$n_founder_per_breed
+Ne      <- 90                                     # MacLeod et al. 2013, as in AlphaSimR
+chrBp   <- 2.8e9 / 30                            # AlphaSimR CATTLE: 2.8 Gb over 30 chr; 29 autosomes x 93 Mb = 2.7 Gb
+recRate <- 9.26e-9; mutRate <- 9.4e-9
+genLen  <- recRate * chrBp                         # Morgans per chromosome
+histNe  <- c(120, 250, 350, 1000, 1500, 2000, 2500, 3500, 7000, 10000, 17000, 62000)
+histGen <- c(  3,   6,  12,   18,   24,  154,  454,  654, 1754,  2354,  3354, 33154)
+hist    <- paste(sprintf("-eN %s %s", histGen / (4 * Ne), histNe / Ne), collapse = " ")
+nHap    <- 2 * nB                                  # haplotypes per breed
+# runMacs() prepends the sample size (2 x nInd haplotypes) and appends "-s <seed>" itself
+cmd <- paste(
+  round(chrBp), "-t", mutRate * 4 * Ne, "-r", recRate * 4 * Ne,
+  "-I 3", nHap, nHap, nHap, hist,
+  "-ej", design$split_gen_HOL_RDC / (4 * Ne) + 1e-6, "2 1",
+  "-ej", design$split_gen_JER     / (4 * Ne) + 1e-6, "3 1")
+cat(cmd, "\n")
+
+# Founder cache (8 Nov 2026). The founders depend only on the seed (seed + rep_id) and the MaCS
+# settings, and nothing random happens before this chunk. So every burn-in with the same rep_id
+# (main, rg 0.9, NUEx0, NUEx05, SFh008) already drew identical founders; the cache only avoids
+# re-running MaCS. The RNG state after MaCS is stored with the founders and restored, so a cached
+# run continues with exactly the random numbers an uncached run would use.
+dir.create("founders", showWarnings = FALSE)
+fkey   <- sprintf("founders/founders_seed%d_nInd%d_chr%d_seg%d_%s.rds", params$seed + params$rep_id,
+                  3 * nB, design$n_chr, design$seg_sites_per_chr,
+                  substr(digest::digest(cmd), 1, 10))
+if (file.exists(fkey)) {
+  fc <- readRDS(fkey); founders <- fc$founders
+  assign(".Random.seed", fc$rng, envir = globalenv())
+  cat("Founders read from cache:", fkey, "\n")
+} else {
+  # nThreads = 2: MaCS runs chromosomes in parallel; the per-chromosome MaCS seeds are drawn in R
+  # before the parallel loop, so the thread count does not change the founders.
+  founders <- runMacs(nInd = 3 * nB, nChr = design$n_chr,
+                      segSites = design$seg_sites_per_chr,
+                      manualCommand = cmd, manualGenLen = genLen,
+                      nThreads = max(1, parallel::detectCores()))
+  saveRDS(list(founders = founders, rng = get(".Random.seed", envir = globalenv()), cmd = cmd), fkey)
+  cat("Founders simulated and cached:", fkey, "\n")
+}
+founders
+if (isTRUE(params$founders_only)) knitr::knit_exit()
+```
+
+# Global simulation parameters
+
+```{r simparam}
+SP <- SimParam$new(founders)
+SP$restrSegSites(minQtlPerChr = design$qtl_per_chr,
+                 minSnpPerChr = design$snp_per_chr, overlap = FALSE)
+
+# Country GxE: each trait x country is its own correlated trait.
+# Genetic covariance = kronecker(country correlation, trait correlation).
+if (params$gxe_rg < 1) {
+  Rc <- matrix(params$gxe_rg, nC, nC); diag(Rc) <- 1
+  CORR <- kronecker(Rc, RG)
+  trait_names <- as.vector(t(outer(countries, traits, paste, sep = "_")))
+} else {
+  CORR <- RG                                   # NAV assumption: same genetics in all countries
+  trait_names <- traits
+}
+stopifnot(min(eigen(CORR, only.values = TRUE)$values) > 0)
+SP$addTraitA(nQtlPerChr = design$qtl_per_chr, mean = rep(0, ncol(CORR)),
+             var = rep(1, ncol(CORR)), corA = CORR, name = trait_names)
+SP$addSnpChip(nSnpPerChr = design$snp_per_chr)
+SP$setSexes("yes_sys")
+SP$setTrackPed(TRUE)
+cat("Traits:", SP$nTraits, "| SNP:", sum(SP$snpChips[[1]]@lociPerChr), "\n")
+```
+
+Genetic values are on a **standardised scale** (founder additive variance = 1 per trait).
+Results are therefore reported in genetic standard deviations, not in kg or %.
+
+## Breed populations and check that the split worked
+
+Haplotypes come out of MaCS in island order, so individuals `1:nB` are island 1 (HOL),
+the next `nB` are RDC, the last `nB` are JER. The check below tests that assumption
+with Nei's G~ST~ on the SNP panel: if island order were wrong, G~ST~ would be ~0.
+
+```{r breeds}
+base <- lapply(seq_along(breeds), function(i) newPop(founders[((i - 1) * nB + 1):(i * nB)]))
+names(base) <- breeds
+
+gst <- function(popA, popB) {
+  pa <- colMeans(pullSnpGeno(popA)) / 2; pb <- colMeans(pullSnpGeno(popB)) / 2
+  pbar <- (pa + pb) / 2
+  HT <- 2 * pbar * (1 - pbar); HS <- (2 * pa * (1 - pa) + 2 * pb * (1 - pb)) / 2
+  (mean(HT) - mean(HS)) / mean(HT)               # ratio of averages across loci
+}
+gst_tab <- data.table(pair = c("HOL-RDC", "HOL-JER", "RDC-JER"),
+                      GST  = c(gst(base$HOL, base$RDC), gst(base$HOL, base$JER),
+                               gst(base$RDC, base$JER)))
+kable(gst_tab, digits = 4)
+# Expectation from the design: HOL-RDC split more recently -> smallest GST
+stopifnot(gst_tab[pair == "HOL-RDC", GST] < gst_tab[pair == "HOL-JER", GST])
+```
+
+**Limitation:** no published F~ST~/G~ST~ between Nordic Holstein, Red Dairy Cattle and Jersey
+was sourced, so the split times are **not calibrated** to real breed differentiation. The
+values above only confirm that the three founder groups are distinct and in the intended order.
+If you supply a published between-breed F~ST~, the split times can be tuned to match it.
+
+# Population structure, blocking and phenotypes
+
+Each cow belongs to a **breed** (factor), a **country** (factor) and a **herd** (block nested
+in breed x country). Since 7 Nov 2026 herds are **single-breed**, as on the CFIT farms (your
+choice; 40 herds, file 00), and cows go to countries in the CFIT proportions of their breed. Herd effects are redrawn every generation
+(herd-generation). Phenotype = genetic value for the cow's country + herd effect + residual.
+Residual variance is set **per breed** so that h^2^ in the base generation equals the
+breed-specific value from file 00.
+
+```{r structure_fns}
+# Herds come from file 00 (single-breed herds per breed x country); same herds in TEST and FULL mode
+all_herds    <- herds_tab$herd
+herd_country <- herds_tab$country
+herd_breed   <- herds_tab$breed
+
+# Cows of breed b go to countries in the CFIT proportions of that breed (largest remainder, ties by
+# country order) and are spread evenly over that breed's herds in the country (single-breed herds).
+assign_blocks <- function(n, gen, b) {
+  sp <- split[breed == b][match(countries, country)]
+  x <- n * sp$n / sum(sp$n); k <- floor(x); left <- n - sum(k)
+  if (left > 0) { o <- order(-(x - k), seq_along(x)); k[o[seq_len(left)]] <- k[o[seq_len(left)]] + 1 }
+  cty <- rep(countries, k)
+  hrd <- character(n)
+  for (c in countries) {
+    i <- which(cty == c); h <- all_herds[herd_breed == b & herd_country == c]
+    if (length(i)) hrd[i] <- rep(h, length.out = length(i))[sample.int(length(i))]
+  }
+  o <- sample.int(n)
+  data.table(country = cty[o], herd = hrd[o], generation = gen)
+}
+
+# One standard-normal herd-generation effect per herd and trait (herds are single-breed);
+# scaled by each breed's herd SD inside make_pheno().
+draw_herd_z <- function() matrix(rnorm(length(all_herds) * nT), ncol = nT,
+                                 dimnames = list(all_herds, traits))
+
+# Base residual variance per breed and trait, from base-generation additive variance
+varE <- sapply(breeds, function(b) {
+  vA <- diag(varA(base[[b]]))[seq_len(nT)]       # country 1 columns (identical var by design)
+  hb <- h2[[b]]
+  vA * (1 - hb) / hb
+})
+rownames(varE) <- traits
+herd_sd <- sqrt(design$herd_var_prop * (1 + varE))   # approx. share of base var(P)
+round(varE, 3)
+
+make_pheno <- function(pop, breed, blocks, herd_z) {
+  G <- gv(pop)
+  if (params$gxe_rg < 1) {                     # pick each cow's own-country columns
+    G <- t(sapply(seq_len(nInd(pop)), function(k) {
+      cidx <- match(blocks$country[k], countries)
+      G[k, ((cidx - 1) * nT + 1):(cidx * nT)]
+    }))
+  }
+  H <- sweep(herd_z, 2, herd_sd[, breed], `*`)
+  E <- matrix(rnorm(nInd(pop) * nT, 0, rep(sqrt(varE[, breed]), each = nInd(pop))), ncol = nT)
+  P <- G + H[blocks$herd, , drop = FALSE] + E
+  colnames(P) <- traits; colnames(G) <- traits
+  list(P = P, G = G)
+}
+```
+
+# Expand founders to the target cow numbers
+
+```{r expand}
+grow <- function(pop, n_target) {
+  while (nInd(pop) < 2 * n_target) {
+    pop <- randCross(pop, nCrosses = min(2 * n_target, 2 * nInd(pop)), nProgeny = 1)
+  }
+  pop
+}
+cur <- lapply(breeds, function(b) grow(base[[b]], n_breed[breed == b, n_sim]))
+names(cur) <- breeds
+sapply(cur, nInd)
+```
+
+# Phenotypic burn-in
+
+**Rationale:** before genomic selection the Nordic programmes selected mainly on production.
+To mimic that history without inventing breeding-value accuracies, the burn-in uses only
+recorded information:
+
+* **Cows** are phenotyped (herd-corrected) and the top `r design$dam_prop*100`% become dams.
+* **Bulls** have no own record, so they are selected on their **dam's** herd-corrected yield index
+  (dam selection).
+* Selection index during burn-in = standardised MY + PY (historical yield selection).
+
+```{r burnin}
+records <- list(); pedigree <- list(); trend <- list(); snpfreq <- list()
+nSnp <- ncol(pullSnpGeno(cur[[1]][1]))
+# allele frequencies chunk-wise (28,400 cows x 50k SNP as integers would need ~5.7 GB)
+snp_p <- function(pop, size = 2000) {
+  ix <- split(seq_len(nInd(pop)), ceiling(seq_len(nInd(pop)) / size))
+  Reduce(`+`, lapply(ix, function(i) colSums(pullSnpGeno(pop[i])))) / (2 * nInd(pop))
+}
+prev_idx <- setNames(vector("list", 3), breeds)
+kept_cows <- list()
+
+for (gen in 0:design$n_burnin_gen) {
+  next_gen <- list()
+  herd_z   <- draw_herd_z()                      # herd-generation effects (one per single-breed herd)
+  for (b in breeds) {
+    pop   <- cur[[b]]
+    cows  <- pop[pop@sex == "F"]; bulls <- pop[pop@sex == "M"]
+    n_cow <- n_breed[breed == b, n_sim]
+    cows  <- cows[seq_len(min(n_cow, nInd(cows)))]
+    blk   <- assign_blocks(nInd(cows), gen, b)
+    # SNP allele frequencies of this generation's cows: base frequencies for metafounders (file 02)
+    snpfreq[[paste(gen, b)]] <- data.table(generation = gen, breed = b, snp = seq_len(nSnp),
+                                           p = snp_p(cows))
+    ph    <- make_pheno(cows, b, blk, herd_z)
+
+    rec <- data.table(id = cows@id, sire = cows@father, dam = cows@mother, breed = b, blk,
+                      ph$P)
+    # true breeding values (simulation truth, used only to score accuracy, never in models)
+    tbv <- ph$G; colnames(tbv) <- paste0("TBV_", traits)
+    records[[paste(gen, b)]] <- cbind(rec, tbv)
+    # keep the genomes of the last three generations' cows for genomic prediction (file 02)
+    if (gen >= design$n_burnin_gen - 2) kept_cows[[paste(gen, b)]] <- cows
+    pedigree[[paste(gen, b)]] <- data.table(id = pop@id, sire = pop@father,
+                                            dam = pop@mother, sex = pop@sex,
+                                            breed = b, generation = gen)
+    trend[[paste(gen, b)]] <- data.table(
+      generation = gen, breed = b, trait = traits,
+      mean_G = colMeans(ph$G), var_G = apply(ph$G, 2, var),
+      mean_P = colMeans(ph$P), var_P = apply(ph$P, 2, var))
+
+    if (gen == design$n_burnin_gen) next
+
+    # herd-corrected yield index (':=' keeps the original row order)
+    Pc   <- copy(rec)[, (traits) := lapply(.SD, function(x) x - mean(x)),
+                      by = herd, .SDcols = traits]
+    idx  <- as.numeric(scale(Pc$MY) + scale(Pc$PY))
+    names(idx) <- rec$id
+    dams <- cows[order(-idx)[seq_len(round(design$dam_prop * nInd(cows)))]]
+    # Bulls are sons of the PREVIOUS generation's dams, so rank them on that index.
+    # Generation 0 has no recorded dams -> random choice (sample).
+    bull_idx <- if (is.null(prev_idx[[b]])) runif(nInd(bulls)) else prev_idx[[b]][bulls@mother]
+    bull_idx[is.na(bull_idx)] <- 0
+    sires <- bulls[order(-bull_idx)[seq_len(design$sires_per_breed[[b]])]]
+    prev_idx[[b]] <- idx
+    next_gen[[b]] <- randCross2(dams, sires, nCrosses = 2 * n_cow, nProgeny = 1)
+  }
+  if (gen < design$n_burnin_gen) cur <- next_gen
+}
+records  <- rbindlist(records)
+pedigree <- rbindlist(pedigree)
+trend    <- rbindlist(trend)
+cat("Records:", nrow(records), "| Pedigree rows:", nrow(pedigree), "\n")
+```
+
+# Checks
+
+## Realised heritability in the base generation
+
+If the residual variances were set correctly, var(G)/var(P) in generation 0 should be close
+to the target h^2^ (herd variance makes it slightly lower, since the herd block is part of var(P)).
+
+```{r check_h2}
+chk <- trend[generation == 0, .(breed, trait, realised_h2 = var_G / var_P)]
+chk <- merge(chk, melt(h2[, .(trait = code, HOL, RDC, JER)], id.vars = "trait",
+                       variable.name = "breed", value.name = "target_h2"),
+             by = c("breed", "trait"))
+chk[, ratio := realised_h2 / target_h2]
+kable(dcast(chk, trait ~ breed, value.var = "ratio"), digits = 2,
+      caption = "Realised / target h2 in generation 0 (expected slightly < 1 because of herd variance)")
+```
+
+## Mean and variance of genetic and phenotypic values over the burn-in
+
+```{r plot_trend, fig.width=10, fig.height=7}
+tl <- melt(trend, id.vars = c("generation", "breed", "trait"))
+ggplot(tl[trait %in% c("MY", "PY", "MUN", "NUE", "CH4", "ICF")],
+       aes(generation, value, colour = breed)) +
+  geom_line() + facet_grid(variable ~ trait, scales = "free_y") +
+  labs(title = "Burn-in: mean and variance of genetic (G) and phenotypic (P) values",
+       y = "standardised units") + theme_bw()
+```
+
+**What to look for:** MY and PY means should rise (they are selected). Other traits follow
+their r~g~ with the yield index (file 00 matrix): NUE r~g~ with MY `r round(RG["MY", "NUE"], 2)` and
+PY `r round(RG["PY", "NUE"], 2)`; Saved Feed `r round(RG["MY", "SF"], 2)` / `r round(RG["PY", "SF"], 2)`;
+CH4 `r round(RG["MY", "CH4"], 2)` / `r round(RG["PY", "CH4"], 2)`; ICF `r round(RG["MY", "ICF"], 2)` /
+`r round(RG["PY", "ICF"], 2)`. Traits with r~g~ near 0 to both should only drift. var(G) should
+decline slowly (Bulmer effect + drift).
+
+# Save
+
+```{r save}
+out <- sprintf("sim_%s_rg%.2f%s%s", params$run_mode, params$gxe_rg, if (params$param_set != "main") paste0("_", params$param_set) else "",
+               if (params$rep_id > 0) paste0("_rep", params$rep_id) else "")
+dir.create(out, showWarnings = FALSE)
+saveRDS(list(pop = cur, kept_cows = kept_cows, SP = SP, design = design, varE = varE,
+             herd_sd = herd_sd, all_herds = all_herds, traits = traits,
+             gxe_rg = params$gxe_rg),
+        file.path(out, "burnin_state.rds"))
+fwrite(records,  file.path(out, "phenotypes.csv"))
+fwrite(pedigree, file.path(out, "pedigree.csv"))
+fwrite(trend,    file.path(out, "trend_burnin.csv"))
+fwrite(gst_tab,  file.path(out, "gst_founders.csv"))
+fwrite(rbindlist(snpfreq), file.path(out, "snp_freq_by_generation.csv"))
+fwrite(h2, file.path(out, "h2_used.csv")); saveRDS(RG, file.path(out, "RG_used.rds"))   # parameters of this burn-in (read by file 04)
+list.files(out)
+cat("Run time:", format(Sys.time() - t0), "\n")
+```
+
+```{r session}
+sessionInfo()
+```

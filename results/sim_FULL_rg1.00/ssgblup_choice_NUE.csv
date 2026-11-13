@@ -1,0 +1,2 @@
+winner,reason,mean_diff_acc_MF_minus_pooled,se_diff,focus_traits
+ssGBLUP,within-breed accuracy differs by at least 1 SE,-0.000506696345207627,0.000210281554332224,NUE

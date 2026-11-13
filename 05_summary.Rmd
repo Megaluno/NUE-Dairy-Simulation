@@ -1,0 +1,618 @@
+---
+title: "05 - Summary: can genomic selection improve nitrogen use efficiency?"
+subtitle: "Holstein / Red Dairy Cattle / Jersey in Denmark, Sweden, Finland and Germany (simulation)"
+author: "Prepared for Emmanuel Ismaila"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    code_folding: hide
+params:
+  base_dir: "sim_FULL_rg1.00"
+  gxe_dir: "sim_FULL_rg0.90"
+  n_rep: 20                    # independent founder replicates: rep 0 in base_dir, rep r in <base_dir>_rep<r>
+  n_sens_rep: 10               # replicates per NUE-correlation scale (sensitivity analysis)
+---
+
+```{r setup, include=FALSE}
+# 11 Nov 2026: kable() inside if-blocks is not printed by knitr (only the last value is); pk() prints each table.
+pk <- function(...) { print(knitr::kable(...)); cat("\n\n") }
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+suppressPackageStartupMessages({ library(data.table); library(ggplot2); library(knitr) })
+rd <- function(f, dir = params$base_dir) { p <- file.path(dir, f); if (file.exists(p)) fread(p) else NULL }
+scen <- c("PHENO", "GS_NTM", "GS_NTM_NUE35", "GS_NTM_NUE75", "GS_NTM_NUE35_MUN", "CH4_SCEN",
+          "GS_NTM_NUE35_MATE", "GS_NTM_NUE35_OCS_dF1")
+pal  <- c(PHENO = "#8c8c8c", GS_NTM = "#1f77b4", GS_NTM_NUE35 = "#2ca02c", GS_NTM_NUE75 = "#006400",
+          GS_NTM_NUE35_MUN = "#9467bd", CH4_SCEN = "#ff7f0e",
+          GS_NTM_NUE35_MATE = "#d62728", GS_NTM_NUE35_OCS_dF1 = "#e377c2")
+rep_dir <- function(r) if (r == 0) params$base_dir else paste0(params$base_dir, "_rep", r)
+idx_def <- fread("params/index_definitions.csv")
+ch4_sc <- idx_def[ch4 != 0, index][1]                          # chosen in file 00 (knee of the CH4 sweep)
+ch4_base <- sprintf("GS_NTM_NUE%02d", round(100 * idx_def[index == ch4_sc, nue]))
+eval_model <- if (file.exists("params/eval_model_choice.txt")) readLines("params/eval_model_choice.txt")[1] else "SNPBLUP"
+scen[scen == "CH4_SCEN"] <- ch4_sc; names(pal)[names(pal) == "CH4_SCEN"] <- ch4_sc
+iw <- fread("params/index_weights.csv")                        # file 00
+eur_per_ntm <- c(HOL = 9.9, RDC = 9.2, JER = 8.0)              # Fikse & Kargo 2020, p. 2
+```
+
+# How to read this report
+
+Everything below is read from files written by `00`-`04`; nothing is typed in. It is a
+**simulation**: genetic parameters come from the literature (file 00), but the population,
+its genomes and its phenotypes are simulated, so results show what the *design* implies,
+not what real Nordic data would show. Units are **genetic standard deviations of the founder
+population** unless stated. GS_NTM, GS_NTM_NUE35, GS_NTM_NUE75, GS_NTM_NUE35_MUN, the methane scenario (`r ch4_sc`) and
+GS_NTM_NUE35_OCS_dF1 were run with up to **`r params$n_rep` replicates, each from its own independent
+coalescent founder population and burn-in** (7 Nov 2026, your choice); PHENO and GS_NTM_NUE35_MATE
+once (replicate 0). Within a replicate all scenarios share the founders, burn-in and random-number
+stream, so scenario differences are paired. Only the replicate section tests whether a difference
+between programmes is consistent; single-run differences in the earlier tables are indicative only.
+Genomic EBVs in file 04 came from **`r eval_model`**, the winner of the head-to-head test in `04b`. Genomic-prediction accuracies come from one cross-validation run
+per dataset (3 folds + forward), so differences below about 0.05 are within fold-to-fold noise.
+
+# Genetic parameters used (file 00)
+
+```{r params}
+h2 <- fread("params/h2.csv")
+kable(h2[, .(trait, code, HOL, RDC, JER, status, source)], caption = "Heritabilities and their sources")
+```
+
+# Breeding goal: NTM weights and the expected price of NUE (file 00)
+
+The indices use the official **NTM sub-index weights (May 2026)** for the five sub-indices that
+have a simulated counterpart (Yield = milk + protein yield with Kargo et al. 2014 economic values,
+Fertility = ICF, Udder health = SCS, Longevity, Saved Feed = SF, the NAV Saved Feed trait since
+7 Nov 2026). NTM has no weight for NUE, MUN or CH4; NUE is added at 0.35 (the Saved Feed weight) or
+0.75, MUN at -0.35 on top of NUE 0.35, and CH4 on top of one NUE weight at the knee of the CH4
+weight sweep (file 00; chosen: `r ch4_sc`, CH4 weight `r idx_def[index == ch4_sc, ch4]`). Mapping and assumptions: file 00.
+
+```{r goal}
+kable(dcast(iw[weight != 0 | trait %in% c("NUE", "MUN", "CH4")], trait ~ index + breed, value.var = "weight"), digits = 3,
+      caption = "Index weights per genetic SD (other traits 0)")
+sw <- if (file.exists("params/ch4_weight_sweep.csv")) fread("params/ch4_weight_sweep.csv") else NULL
+if (!is.null(sw)) print(ggplot(melt(sw, id.vars = c("nue", "ch4_weight"), measure.vars = c("CH4", "NUE", "ntm_lost_pct")),
+         aes(-ch4_weight, value)) + geom_line() + facet_grid(variable ~ nue, scales = "free_y", labeller = label_both) +
+  geom_vline(xintercept = 0.5, lty = 3) + theme_bw() +
+  labs(x = "negative CH4 weight (dotted = chosen knee, 0.50)", y = NULL,
+       title = "CH4 weight sweep (file 00, selection-index theory, cow-weighted)"))
+fr <- fread("params/ntm_nue_frontier.csv")
+kable(fr[nue_weight %in% c(0, 0.35, 0.75), .(breed, nue_weight, NUE, MUN, CH4, MY, PY, NTM_pct_of_max, EUR_loss_per_cow_yr)],
+      digits = 3, caption = "Selection-index theory (true breeding values, per unit selection intensity): responses in genetic SD, NTM value kept, EUR per cow-year lost")
+```
+
+# Heritability recovered from the simulated data (file 02)
+
+```{r vc}
+vc <- rd("vc_gblup.csv")
+if (!is.null(vc)) kable(vc, digits = 3,
+  caption = "GBLUP- and ABLUP-REML h2 vs the true h2 within breed x generation (FULL data, 1,500 genotyped / 3,000 phenotyped cows)")
+```
+
+`r if (!is.null(vc)) { vc[, rG := h2_GBLUP_REML / h2_true_genotyped]; vc[, rA := h2_ABLUP_REML / h2_true_genotyped] }; ""`
+Genomic REML relative to the true within-breed h^2^ (ratio): `r if (!is.null(vc)) paste(vc[order(rG), sprintf("%s %.2f", trait, rG)], collapse = ", ") else "n/a"`.
+A ratio below 1 is genetic variance the SNP panel (about 10k) does not capture (de los Campos et al. 2015).
+Pedigree REML was within 20% of the true value for `r if (!is.null(vc)) paste(vc[abs(rA - 1) <= 0.2, trait], collapse = ", ") else "n/a"`
+and further off for `r if (!is.null(vc)) paste(vc[abs(rA - 1) > 0.2, sprintf("%s (%.2f)", trait, rA)], collapse = ", ") else "n/a"`;
+with 3,000 records, low-h^2^ traits carry little information.
+
+# Genomic prediction: cross-validated accuracy (file 02)
+
+Every model fits **breed** and herd x generation as fixed effects (file 02), so no model
+estimates the genetic differences *between* breeds, and file 04 selects *within* breed. The
+accuracy that matters is therefore the **within-breed** correlation between EBV and true
+breeding value (averaged over breeds, weighted by cows). The pooled correlation over all three
+breeds is shown second, because it also rewards or penalises arbitrary breed-level offsets in
+the EBVs.
+
+```{r cv}
+traits_cv <- c("NUE", "MUN", "SF", "CH4")
+cv <- rbindlist(lapply(traits_cv, function(t) rd(sprintf("cv_results_%s.csv", t))), fill = TRUE)
+cv9 <- rd("cv_results_NUE.csv", params$gxe_dir)
+if (!is.null(cv9)) cv <- rbind(cv, cv9[, trait := "NUE_rg0.9"], fill = TRUE)
+cv <- cv[model != "GBLUP_snp"]
+cvs <- cv[, .(acc_wb = mean(acc_within_breed), acc = mean(acc_TBV), slope = mean(slope)),
+          by = .(trait, model, scheme = ifelse(scheme == "forward", "forward", "k-fold"))]
+kable(dcast(cvs, model ~ trait + scheme, value.var = "acc_wb"), digits = 3,
+      caption = "Within-breed accuracy = cor(EBV, true BV) within breed, n-weighted mean (the accuracy that matters for selection)")
+kable(dcast(cvs, model ~ trait + scheme, value.var = "acc"), digits = 3,
+      caption = "Pooled accuracy across the three breeds (sensitive to breed-level EBV offsets; for transparency)")
+ggplot(cv[scheme != "forward"], aes(model, acc_within_breed, fill = model)) +
+  geom_boxplot(show.legend = FALSE) + facet_wrap(~trait) + theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + labs(x = NULL, y = "within-breed accuracy (k-fold)")
+best <- cvs[!is.na(acc_wb), .SD[which.max(acc_wb)], by = .(trait, scheme)]
+```
+
+```{r cv_dispersion}
+# forward validation (youngest, unrecorded generation): EBVs saved by file 02
+ef <- rbindlist(lapply(traits_cv, function(t) rd(sprintf("ebv_forward_%s.csv", t))), fill = TRUE)
+mods <- intersect(c("ABLUP", "GBLUP", "ssGBLUP", "ssGBLUP_MF", "wssGBLUP", "rrBLUP", "BayesA", "BayesB"), names(ef))
+el <- melt(ef, id.vars = c("trait", "id", "breed", "TBV"), measure.vars = mods,
+           variable.name = "model", value.name = "EBV")
+el[, `:=`(tc = TBV - mean(TBV), ec = EBV - mean(EBV)), by = .(trait, model, breed)]
+disp <- el[, .(slope_wb = sum(tc * ec) / sum(ec^2)), by = .(trait, model)]
+kable(dcast(disp, model ~ trait, value.var = "slope_wb"), digits = 2,
+      caption = "Forward validation, dispersion within breed: regression of true BV on EBV after centring both by breed (1 = unbiased; < 1 = over-dispersed)")
+off <- el[trait == "NUE", .(TBV = mean(TBV), EBV = mean(EBV)), by = .(model, breed)]
+offw <- dcast(off, model ~ breed, value.var = "EBV")
+offw <- rbind(data.table(model = "true BV", t(setNames(off[model == mods[1], TBV], off[model == mods[1], breed]))), offw, fill = TRUE)
+kable(offw, digits = 2, caption = "NUE, forward validation: breed means of true BV and of each model's EBV")
+s_nue <- cvs[trait == "NUE" & model == "ssGBLUP" & scheme == "forward"]
+jer_low <- off[model == "ssGBLUP"][order(EBV)]$breed[1]
+f2 <- function(x) sprintf("%.2f", x)
+bw <- function(tr, sc) { b <- best[trait == tr & scheme == sc]; sprintf("%s (%.2f)", b$model, b$acc_wb) }
+wss_h2 <- range(cv[model == "wssGBLUP", h2_REML_fit], na.rm = TRUE)
+```
+
+**Cross-examination of the working assumption that ssGBLUP gives good EBVs.**
+
+`r arc <- "archive_rg9_2026-11-03/sim_FULL_rg1.00/cv_results_NUE.csv"; a_nue <- if (file.exists(arc)) fread(arc)[model == "ssGBLUP" & scheme == "forward"] else NULL; ord_ok <- identical(off[model == "ssGBLUP"][order(-EBV)]$breed, off[model == mods[1]][order(-TBV)]$breed); ""`
+* *Breed-level offsets in single-step EBVs.* In this run ssGBLUP's pooled NUE accuracy in the
+  youngest generation was `r f2(s_nue$acc)` (slope `r f2(s_nue$slope)`) against a within-breed
+  accuracy of `r f2(s_nue$acc_wb)`, and its breed means were
+  `r if (ord_ok) "in the same order as the true breed means" else paste0("not in the order of the true breed means (", jer_low, " ranked lowest)")`.
+  `r if (!is.null(a_nue)) sprintf("In the archived run with the 9-correlation matrix (1-3 Nov), the same model gave a pooled accuracy of %s against %s within breed, because it ranked the breed with the highest true mean lowest.", f2(mean(a_nue$acc_TBV)), f2(mean(a_nue$acc_within_breed))) else ""`
+  So the breed-level part of single-step EBVs is unstable between runs. Because breed is a
+  fixed effect, that part carries no information in any model, and it is consistent with the
+  known incompatibility between the genomic matrix G and the pedigree matrix A~22~ (different
+  bases and genetic means) in single-step evaluation (Vitezica et al. 2011, *Genet Res*
+  93:357-366). **Correction (7 Nov 2026):** an earlier version said that no adjustment was tested.
+  In fact `ssGBLUP` has always used G rescaled to A~22~ (a + bG, Christensen et al. 2012), pooled over
+  the three breeds. Since 7 Nov the breed-metafounder model (`ssGBLUP_MF`; Legarra et al. 2015,
+  *Genetics* 200:455-468) is fitted alongside it; the comparison is below.
+* *Pooled-adjusted G vs metafounders.* `r ch <- rbindlist(lapply(traits_cv, function(t) rd(sprintf("ssgblup_choice_%s.csv", t))), fill = TRUE); cp <- rd("G_A22_compatibility.csv"); if (nrow(ch)) paste0("Chosen per trait (decision rule of file 02: within-breed accuracy, ties within 1 SE broken by dispersion slope): ", paste(sprintf("%s %s (MF minus pooled %+.3f, SE %.3f)", ch$focus_traits, ch$winner, ch$mean_diff_acc_MF_minus_pooled, ch$se_diff), collapse = "; "), ".") else "Not available."`
+  `r if (!is.null(cp)) sprintf("Mean gap between G and A22 relationships across breed blocks: pooled-adjusted %.3f, metafounder %.3f (absolute mean over blocks; file 02). ", mean(abs(cp$gap_pooled)), mean(abs(cp$gap_MF))) else ""`Why this matters: with pooled rescaling the between-breed blocks of G and A~22~ cannot all match at
+  once, so EBVs carry an arbitrary breed offset; metafounders give each breed its own base, so G~05~
+  and A^Γ^~22~ agree by construction. Within-breed ranking, which is what file 04 uses, is affected
+  only through the within-breed blocks.
+* *Within breed, the best model was:* NUE `r bw("NUE", "k-fold")` k-fold and
+  `r bw("NUE", "forward")` forward; MUN `r bw("MUN", "k-fold")` and `r bw("MUN", "forward")`;
+  Saved Feed `r bw("SF", "k-fold")` and `r bw("SF", "forward")`; CH4 `r bw("CH4", "k-fold")` and
+  `r bw("CH4", "forward")`.
+  `r if ("NUE_rg0.9" %in% best$trait) sprintf("With between-country r_g 0.9: NUE %s k-fold and %s forward.", bw("NUE_rg0.9", "k-fold"), bw("NUE_rg0.9", "forward")) else ""`
+  Differences below about 0.05 are within fold-to-fold noise (one run per dataset).
+* GBLUP and rrBLUP agree exactly, as theory requires. BayesA/B do not improve on GBLUP under
+  this polygenic architecture.
+* Weighted ssGBLUP is not recommended: after the SNP-weight iteration REML fitted h^2^ of
+  `r f2(wss_h2[1])` to `r f2(wss_h2[2])` (true values are far lower), and its EBVs are strongly
+  over-dispersed.
+* *Real-data benchmark.* For Finnish Red cows, Chegini et al. (2026, *Front Genet*
+  17:1815864) report ssGBLUP forward-validation correlations of 0.33-0.53 and dispersion
+  0.45-0.75 for feed-efficiency traits. Their correlations are computed against real
+  (corrected) phenotypes, so they are not the same quantity as accuracy against true breeding
+  values here and cannot be ranked against it. Their dispersion range does show that
+  over-dispersion of this size also occurs in real single-step evaluations.
+
+# Multi-trait Bayesian models and GxE (file 03)
+
+```{r mt}
+mth <- rd("mt_h2.csv"); mta <- rd("mt_accuracy.csv"); mtr <- rd("mt_rg.csv")
+if (!is.null(mth)) kable(dcast(mth, trait ~ model, value.var = "h2"), digits = 3, caption = "Posterior-mean h2")
+if (!is.null(mtr)) kable(mtr[, .(rmse = sqrt(mean((estimated - realised)^2)),
+                                 cor = cor(estimated, realised)), by = model], digits = 3,
+                         caption = "Recovery of the realised genetic correlations")
+if (!is.null(mta)) kable(dcast(mta[trait %in% c("NUE", "MUN", "MY", "SF")], scenario + trait ~ model,
+                               value.var = "acc_TBV"), digits = 3,
+                         caption = "Accuracy in the youngest generation; N_masked = NUE and MUN unrecorded")
+```
+
+```{r mt_text, include=FALSE}
+nue_nm <- if (!is.null(mta)) mta[scenario == "N_masked" & trait == "NUE"][order(-acc_TBV)] else NULL
+acc_s <- function(x) paste(sprintf("%s %.2f", sub("MT-", "", x$model), x$acc_TBV), collapse = ", ")
+dic_best <- if (!is.null(mta) && "DIC" %in% names(mta)) unique(mta[scenario == "N_masked", .(model, DIC)])[which.min(DIC), sub("MT-", "", model)] else NA
+```
+
+**Multi-trait reading.** Two separate questions:
+
+* *Prediction:* when NUE and MUN are unrecorded on young cows but their other traits are
+  recorded (`N_masked`), NUE accuracy was `r acc_s(nue_nm)`; the most accurate model was
+  `r sub("MT-", "", nue_nm$model[1])`, and DIC was lowest for `r dic_best`. Only models whose
+  accuracy exceeds DIAG (no genetic covariances) gain from the correlations.
+* *Parameter estimation:* with 1,500 cows and `r if (!is.null(mth)) uniqueN(mth$trait) else 11` traits, posterior heritabilities are pulled
+  towards the prior (compressed range: `r if (!is.null(mth)) sprintf("%.2f to %.2f", min(mth$h2), max(mth$h2)) else "n/a"`
+  against true values of `r if (!is.null(vc)) sprintf("%.2f to %.2f", min(vc$h2_true_genotyped), max(vc$h2_true_genotyped)) else "n/a"`)
+  and genetic correlations are shrunk towards zero (slope of estimated on realised r~g~:
+  `r if (!is.null(mtr)) paste(mtr[, .(b = coef(lm(estimated ~ realised))[2]), by = model][, sprintf("%s %.2f", sub("MT-", "", model), b)], collapse = ", ") else "n/a"`), though
+  their pattern is recovered`r if (!is.null(mtr)) paste0(" (correlation between estimated and realised r_g: ", paste(mtr[, .(c = cor(estimated, realised)), by = model][, sprintf("%s %.2f", sub("MT-", "", model), c)], collapse = ", "), ")") else ""`. These Bayesian (co)variances should not be used as parameter
+  estimates at this data size; the single-trait REML values in Section 3 are more reliable.
+
+```{r gxe}
+g1 <- rd("gxe_models.csv"); g9 <- rd("gxe_models.csv", params$gxe_dir)
+gx <- rbindlist(list(if (!is.null(g1)) cbind(data = "no GxE simulated (r_g = 1, control)", g1),
+                     if (!is.null(g9)) cbind(data = "GxE simulated (r_g = 0.9)", g9)), fill = TRUE)
+if (nrow(gx)) kable(gx[, .(data, trait, model, LRT, df, p_LRT, rg_between, rg_se, rg_upper95, true_rg)],
+                    digits = 3, caption = "GxE: likelihood-ratio tests against the no-GxE model")
+b1 <- rd("gxe_bayes.csv"); b9 <- rd("gxe_bayes.csv", params$gxe_dir)
+gb <- rbindlist(list(if (!is.null(b1)) cbind(data = "no GxE simulated (r_g = 1, control)", b1),
+                     if (!is.null(b9)) cbind(data = "GxE simulated (r_g = 0.9)", b9)), fill = TRUE)
+if (nrow(gb)) kable(gb[, .(data, trait, prior_mean_rg, rg_mean, rg_lower95, rg_upper95, true_rg)], digits = 3,
+                    caption = "Bayesian multi-country model: posterior mean between-country r_g under two opposite priors")
+v1 <- rd("gxe_bayes_verdict.csv"); v9 <- rd("gxe_bayes_verdict.csv", params$gxe_dir)
+gv <- rbindlist(list(if (!is.null(v1)) cbind(data = "control (r_g = 1)", v1),
+                     if (!is.null(v9)) cbind(data = "GxE (r_g = 0.9)", v9)), fill = TRUE)
+if (nrow(gv)) kable(gv, caption = "GxE verdict (both priors must agree)")
+```
+
+```{r gxe_text, include=FALSE}
+lrt <- if (nrow(gx)) gx[model != "M1_main"] else data.table()
+lrt_s <- function(d) { x <- lrt[grepl(d, data)]
+  paste(sprintf("%s p %s (%s)", x$trait, ifelse(x$p_LRT < 0.001, "< 0.001", sprintf("= %.3f", x$p_LRT)),
+                ifelse(x$converged, "converged", "not converged")), collapse = "; ") }
+false_pos <- nrow(lrt) && lrt[grepl("control", data) & p_LRT < 0.05, .N] > 0
+verd <- function(d) { x <- gv[grepl(d, data)]; paste(sprintf("%s: %s", x$trait, x$verdict), collapse = "; ") }
+```
+
+**GxE reading.** REML likelihood-ratio tests of the compound-symmetry model against no GxE:
+on the control data (no GxE simulated) `r lrt_s("control")`; on the data simulated with
+r~g~ = 0.9 `r lrt_s("0.9")`. `r rule_ctrl <- lrt[grepl("control", data) & p_LRT < 0.05 & rg_upper95 < 0.8, .N]; if (false_pos) sprintf("The likelihood-ratio test alone flagged GxE on the control data, where none was simulated (a false positive); the full rule of file 03, which also requires the upper 95%% limit of r_g below 0.80, %s.", if (rule_ctrl == 0) "did not declare it" else "declared it as well") else "No false GxE was flagged on the control data."`
+`r if (nrow(lrt) && any(!lrt$converged)) sprintf("%d of %d of these fits did not converge within the iteration cap (file 03, gxe_reml_iter), so their likelihood-ratio tests are not reliable.", lrt[converged == FALSE, .N], nrow(lrt)) else ""`
+Standard errors of the between-country r~g~ were `r if (nrow(lrt)) sprintf("%.2f to %.2f", min(lrt$rg_se, na.rm = TRUE), max(lrt$rg_se, na.rm = TRUE)) else "n/a"`.
+The Bayesian verdict (both priors must agree) was - control: `r verd("control")`; GxE data: `r verd("0.9")`.
+Estimating GxE of this size needs far more genotyped and recorded cows per country than the
+1,500-cow subsample used here. The GxE dataset came from a separate coalescent run, so its
+accuracies are not a paired comparison with the control dataset.
+
+# Breeding programmes over time (file 04)
+
+```{r load04}
+trend <- rbindlist(lapply(scen, function(s) rd(sprintf("gs_trend_%s.csv", s))), fill = TRUE)
+beq   <- rbindlist(lapply(scen, function(s) rd(sprintf("gs_breeders_equation_%s.csv", s))), fill = TRUE)
+idx   <- rbindlist(lapply(scen, function(s) rd(sprintf("gs_index_correlations_%s.csv", s))), fill = TRUE)
+Fdt   <- rbindlist(lapply(scen, function(s) rd(sprintf("gs_inbreeding_%s.csv", s))), fill = TRUE)
+t0    <- rd("trend_burnin.csv")
+tr_all <- rbind(rbindlist(lapply(scen, function(s) cbind(scenario = s, t0))), trend, fill = TRUE)
+tr_all[, scenario := factor(scenario, scen)]
+```
+
+## Mean and variance of genetic and phenotypic values
+
+```{r trends, fig.width=11, fig.height=9}
+key <- c("NUE", "MUN", "CH4", "MY", "PY", "SF")
+long <- melt(tr_all[trait %in% key & breed == "HOL"],
+             id.vars = c("scenario", "generation", "breed", "trait"))
+ggplot(long, aes(generation, value, colour = scenario)) + geom_line() +
+  geom_vline(xintercept = max(t0$generation) + 0.5, lty = 3) + scale_colour_manual(values = pal) +
+  facet_grid(variable ~ trait, scales = "free_y") + theme_bw() +
+  labs(title = "Holstein: mean and variance of genetic (G) and phenotypic (P) values",
+       subtitle = "generations 0-10 = phenotypic burn-in; dotted line = start of the programmes (replicate 0)",
+       y = "founder genetic SD units")
+```
+
+```{r final_table}
+fin <- tr_all[generation == max(generation) & trait %in% c(key, "SCS", "LNVAR", "ICF", "LONG")]
+kable(dcast(fin, breed + trait ~ scenario, value.var = "mean_G"), digits = 2,
+      caption = "Mean genetic value in the final generation")
+gain <- merge(tr_all[generation == max(t0$generation), .(breed, trait, scenario, start = mean_G)],
+              tr_all[generation == max(generation), .(breed, trait, scenario, end = mean_G)])
+gain[, response := end - start]
+kable(dcast(gain[trait %in% key], breed + trait ~ scenario,
+            value.var = "response"), digits = 2,
+      caption = "Response over the 10 selection generations (end minus last burn-in generation), replicate 0")
+```
+
+## Breeder's equation: expected vs observed response
+
+```{r beq}
+beq[, dG_observed := shift(meanH, type = "lead") - meanH, by = .(scenario, breed)]
+kable(beq[, .(i_sires_theory = mean(i_male_theory), i_sires = mean(i_male_obs),
+              i_dams_of_sons = mean(i_elite_obs), i_dams_of_daughters = mean(i_female_obs),
+              r_m = mean(r_male), r_f = mean(r_female), S_male = mean(S_male),
+              dG_expected = mean(dG_expected), dG_observed = mean(dG_observed, na.rm = TRUE)),
+          by = .(scenario, breed)], digits = 3,
+      caption = "Selection intensity (i), selection differential (S), accuracy (r), expected and observed response per generation (each scenario's own index)")
+ggplot(beq[!is.na(dG_observed)], aes(dG_expected, dG_observed, colour = scenario)) +
+  geom_abline(lty = 2) + geom_point() + scale_colour_manual(values = pal) +
+  facet_wrap(~breed) + theme_bw() + labs(title = "Four-path breeder's equation vs simulation")
+```
+
+The response is measured on each scenario's **own** index, so ΔG values are not comparable
+*between* scenarios; the trait-level table above is the like-for-like comparison.
+
+## Correlation of traits with the selection index
+
+```{r idx, results="asis"}
+if (nrow(idx)) {
+  pk(dcast(idx[, .(r = mean(cor_EBV_index)), by = .(scenario, trait)], trait ~ scenario,
+              value.var = "r"), digits = 2, caption = "cor(EBV of trait, index), mean over generations")
+  pk(dcast(idx[, .(acc = mean(acc_trait)), by = .(scenario, trait)], trait ~ scenario,
+              value.var = "acc"), digits = 2, caption = "Accuracy of genomic EBV per trait in candidates")
+}
+```
+
+## Inbreeding
+
+```{r inb, fig.width=10, fig.height=4}
+ggplot(Fdt, aes(generation, F_genomic, colour = scenario)) + geom_line() +
+  geom_hline(yintercept = 0.06, lty = 2) + scale_colour_manual(values = pal) +
+  facet_wrap(~breed) + theme_bw() +
+  labs(y = "mean genomic F relative to end of burn-in", subtitle = "dashed = 6% target from the pipeline figure")
+kable(dcast(Fdt[generation == max(generation)], breed ~ scenario, value.var = "F_genomic"), digits = 3,
+      caption = "Genomic inbreeding after 10 generations of selection (level relative to the multi-breed base)")
+# rate of inbreeding per generation: 1 - ((1 - F_T) / (1 - F_0))^(1/T), from the first to the last generation
+dF <- Fdt[, .(F0 = F_genomic[generation == min(generation)], FT = F_genomic[generation == max(generation)],
+              T = max(generation) - min(generation)), by = .(scenario, breed)]
+dF[, dF_per_gen := 1 - ((1 - FT) / (1 - F0))^(1 / T)]
+kable(dcast(dF, breed ~ scenario, value.var = "dF_per_gen"), digits = 4,
+      caption = "Rate of inbreeding per generation, replicate 0 (FAO guideline: at most 0.01; OCS target: 0.01)")
+ocs <- rbindlist(lapply(0:(params$n_rep - 1), function(r) rd(sprintf("gs_ocs_GS_NTM_NUE35_OCS_dF1%s.csv", if (r == 0) "" else paste0("_rep", r)), rep_dir(r))), fill = TRUE)
+if (nrow(ocs)) kable(ocs[, .(feasible = all(feasible), mean_sires_used = mean(n_sires_used),
+                                 max_sire_share = max(max_share),
+                                 max_gap_to_target = max(C_achieved - C_target)), by = .(scenario, breed)],
+                         digits = 4, caption = "OCS: every generation on target? sires used, largest sire share")
+```
+
+# Replicates: how robust are the scenario differences?
+
+The six main scenarios were each run on up to `r params$n_rep` replicates. **Each replicate has its own
+coalescent founder population and burn-in** (file 01 with `rep_id` r: seed + r, which also changes the
+MaCS seed), so the spread between replicates now includes founder sampling, Mendelian sampling,
+phenotypes, training samples and matings. The same founders and seed are used for every scenario
+within a replicate, so differences are **paired**.
+
+**NTM value of a response.** For each breed, the genetic change in each trait is divided by its
+standardisation SD (file 04, `gs_sdA0.csv`), multiplied by that breed's GS_NTM weight and by 10
+(NTM index units per SD), and summed: the change in the *simulated part* of NTM. Multiplied by
+EUR per NTM unit (HOL 9.9, RDC 9.2, JER 8.0 per cow-year; Fikse & Kargo 2020) it is the extra
+income per cow-year of daughters at the end, excluding non-simulated sub-indices.
+
+```{r replicates, results="asis"}
+rep_sc <- c("GS_NTM", "GS_NTM_NUE35", "GS_NTM_NUE75", "GS_NTM_NUE35_MUN", ch4_sc, "GS_NTM_NUE35_OCS_dF1")
+R <- 0:(params$n_rep - 1)
+read_rep <- function(kind, s, r, dir = rep_dir(r))
+  rd(sprintf("gs_%s_%s%s.csv", kind, s, if (r == 0) "" else paste0("_rep", r)), dir)
+w_ntm <- iw[index == "GS_NTM"]
+# response = final generation minus the last burn-in generation OF THE SAME REPLICATE
+resp_of <- function(s, r, dir = rep_dir(r)) {
+  tr <- read_rep("trend", s, r, dir); tb <- rd("trend_burnin.csv", dir); if (is.null(tr) || is.null(tb)) return(NULL)
+  merge(tr[generation == max(generation), .(breed, trait, end = mean_G)],
+        tb[generation == max(generation), .(breed, trait, start = mean_G)], by = c("breed", "trait"))[, response := end - start][]
+}
+reps <- rbindlist(lapply(rep_sc, function(s) rbindlist(lapply(R, function(r) {
+  resp <- resp_of(s, r); Fd <- read_rep("inbreeding", s, r); sdA0 <- rd("gs_sdA0.csv", rep_dir(r))
+  if (is.null(resp) || is.null(Fd) || is.null(sdA0)) return(NULL)
+  v <- merge(merge(resp, sdA0, by = "trait"), w_ntm[, .(breed, trait, w = weight)], by = c("breed", "trait"))
+  ntm <- v[, .(NTM = 10 * sum(w * response / sdA0)), by = breed][, EUR := NTM * eur_per_ntm[breed]]
+  dF <- Fd[, .(dF = 1 - ((1 - F_genomic[generation == max(generation)]) /
+                           (1 - F_genomic[generation == min(generation)]))^(1 / (max(generation) - min(generation)))),
+           by = breed]
+  out <- dcast(resp[trait %in% c("NUE", "MUN", "CH4", "MY", "PY", "SF", "SCS", "ICF", "LONG")], breed ~ trait, value.var = "response")
+  Reduce(function(a, b) merge(a, b, by = "breed"), list(out, ntm, dF))[, `:=`(scenario = s, replicate = r)]
+}))))
+if (nrow(reps)) {
+  # tidy copies for the spreadsheet (NUE_replicate_results.xlsx)
+  rep_long <- rbindlist(lapply(rep_sc, function(s) rbindlist(lapply(R, function(r) {
+    x <- resp_of(s, r); if (is.null(x)) return(NULL)
+    x[trait %in% c("NUE", "MUN", "CH4", "MY", "PY", "SF")][, `:=`(scenario = s, replicate = r,
+      source = sprintf("%s/gs_trend_%s%s.csv", rep_dir(r), s, if (r == 0) "" else paste0("_rep", r)))]
+  }))))
+  fwrite(rep_long, file.path(params$base_dir, "replicate_response_long.csv"))
+  fwrite(reps[, .(scenario, replicate, breed, dF, NTM, EUR,
+                  source = sprintf("%s/gs_inbreeding_%s%s.csv", sapply(replicate, rep_dir), scenario, ifelse(replicate == 0, "", paste0("_rep", replicate))))],
+         file.path(params$base_dir, "replicate_dF.csv"))
+  pk(reps[, .(n = uniqueN(replicate)), by = scenario], caption = "Replicates available per scenario")
+  long <- melt(reps, id.vars = c("scenario", "replicate", "breed"))
+  pk(dcast(long[, .(txt = if (.BY$variable == "dF") sprintf("%.4f +/- %.4f", mean(value), sd(value)) else sprintf("%.2f +/- %.2f", mean(value), sd(value))), by = .(scenario, breed, variable)],
+              breed + variable ~ scenario, value.var = "txt"),
+        caption = "Response over 10 selection generations (genetic SD; NTM = index units; EUR = per cow-year) and rate of inbreeding (dF): mean +/- SD over replicates")
+  pair_test <- function(a, b, v) {
+    w <- merge(reps[scenario == a, c("replicate", "breed", v), with = FALSE],
+               reps[scenario == b, c("replicate", "breed", v), with = FALSE], by = c("replicate", "breed"))
+    if (nrow(w) == 0) return(NULL)
+    w[, d := get(paste0(v, ".x")) - get(paste0(v, ".y"))]
+    w[, .(n = .N, mean_diff = mean(d), sd_diff = sd(d), same_sign = max(sum(d > 0), sum(d < 0)),
+          p_paired = if (.N > 1 && sd(d) > 0) t.test(d)$p.value else NA_real_), by = breed][, comparison := paste(a, "-", b)][, trait := v][]
+  }
+  pt <- rbindlist(lapply(c("NUE", "MUN", "CH4", "MY", "PY", "SF", "NTM", "EUR", "dF"), function(v) rbind(
+    pair_test("GS_NTM_NUE35", "GS_NTM", v), pair_test("GS_NTM_NUE75", "GS_NTM", v),
+    pair_test("GS_NTM_NUE35_MUN", "GS_NTM_NUE35", v), pair_test(ch4_sc, ch4_base, v),
+    pair_test("GS_NTM_NUE35_OCS_dF1", "GS_NTM_NUE35", v))))
+  pk(pt[, .(comparison, trait, breed, n, mean_diff, sd_diff, same_sign, p_paired)], digits = 4,
+        caption = "Paired differences between scenarios (same seed within replicate); same_sign = replicates with the majority sign; paired t-test")
+}
+```
+
+With n replicates the paired t-test has n - 1 degrees of freedom; p-values are per breed and per
+comparison without correction for multiple testing, so treat them as a guide to consistency across
+founder populations, not as a formal claim about real populations.
+
+**Simulation vs selection-index theory.** The ratio of NUE responses (NUE index / NTM index)
+from the simulation is compared with the ratio expected from file 00 (true breeding values,
+infinite population). Agreement checks that the simulated programme behaves as the index
+design intends; differences come from EBV accuracy, finite population and changing variances.
+
+```{r theory_check}
+if (nrow(reps)) {
+  sim_ratio <- reps[, .(NUE = mean(NUE), NTM = mean(NTM)), by = .(scenario, breed)]
+  sim_ratio <- merge(sim_ratio[scenario %in% c("GS_NTM_NUE35", "GS_NTM_NUE75")],
+                     sim_ratio[scenario == "GS_NTM", .(breed, NUE0 = NUE, NTM0 = NTM)], by = "breed")
+  sim_ratio[, nue_weight := ifelse(scenario == "GS_NTM_NUE35", 0.35, 0.75)]
+  th <- merge(fr[nue_weight %in% c(0.35, 0.75), .(breed, nue_weight, NUE_th = NUE, NTM_th = NTM_pct_of_max / 100)],
+              fr[nue_weight == 0, .(breed, NUE0_th = NUE)], by = "breed")
+  cmp_th <- merge(sim_ratio, th, by = c("breed", "nue_weight"))
+  kable(cmp_th[, .(breed, scenario, NUE_ratio_sim = NUE / NUE0, NUE_ratio_theory = NUE_th / NUE0_th,
+                   NTM_ratio_sim = NTM / NTM0, NTM_ratio_theory = NTM_th)], digits = 3,
+        caption = "NUE and NTM response relative to GS_NTM: simulation (replicate means) vs selection-index theory")
+}
+```
+
+# Sensitivity: how much do the conclusions rest on the NUE correlations?
+
+Every NUE correlation was multiplied by s = 0 and s = 0.5 (file 00; s = 1 is the main run), and new
+founders, burn-ins and the GS_NTM and GS_NTM_NUE35 programmes were run for each level (up to
+`r params$n_sens_rep` replicates per level). s = 0 means NUE is genetically unrelated to every other trait.
+A third set uses the heritability of the NAV Saved Feed index itself, 0.08 (Lidauer et al., NAV workshop
+2026), instead of 0.23 (ReFI) (your choice, 7 Nov 2026).
+
+```{r sensitivity, results="asis"}
+sens_dir <- function(set, r) paste0(params$base_dir, if (set == "main") "" else paste0("_", set), if (r == 0) "" else paste0("_rep", r))
+sens <- rbindlist(lapply(c("NUEx0", "NUEx05", "SFh008", "main"), function(set) rbindlist(lapply(0:(params$n_sens_rep - 1), function(r)
+  rbindlist(lapply(c("GS_NTM", "GS_NTM_NUE35"), function(s) {
+    x <- resp_of(s, r, sens_dir(set, r)); sd0 <- rd("gs_sdA0.csv", sens_dir(set, r))
+    if (is.null(x) || is.null(sd0)) return(NULL)
+    v <- merge(merge(x, sd0, by = "trait"), w_ntm[, .(breed, trait, w = weight)], by = c("breed", "trait"))
+    merge(merge(x[trait == "NUE", .(breed, NUE = response)], x[trait == "SF", .(breed, SF = response)], by = "breed"),
+          v[, .(NTM = 10 * sum(w * response / sdA0)), by = breed], by = "breed")[
+      , `:=`(set = set, replicate = r, scenario = s)]
+  }))))), fill = TRUE)
+if (nrow(sens)) {
+  sens[, set_label := c(NUEx0 = "NUE correlations x 0", NUEx05 = "NUE correlations x 0.5",
+                        SFh008 = "Saved Feed h2 0.08", main = "main run")[set]]
+  sw2 <- dcast(sens, set_label + breed + replicate ~ scenario, value.var = c("NUE", "SF", "NTM"))
+  sw2[, `:=`(dNUE = NUE_GS_NTM_NUE35 - NUE_GS_NTM, dNTM = NTM_GS_NTM_NUE35 - NTM_GS_NTM)]
+  sens_tab <- sw2[, .(n = .N, NUE_under_NTM = mean(NUE_GS_NTM), SF_under_NTM = mean(SF_GS_NTM),
+                      NUE_gain_from_weight = mean(dNUE),
+                      p_NUE = if (.N > 1 && sd(dNUE) > 0) t.test(dNUE)$p.value else NA_real_,
+                      NTM_change = mean(dNTM)), by = .(set_label, breed)][order(breed, set_label)]
+  pk(sens_tab, digits = 3, caption = "Sensitivity sets: NUE and Saved Feed response under NTM alone, extra NUE from the 0.35 weight, and NTM change (paired within replicate)")
+  th_s <- fread("params/nue_sensitivity_theory.csv")
+  pk(th_s, digits = 3, caption = "The same comparison from selection-index theory (file 00)")
+}
+```
+
+**Reading.** If the NUE gain *under NTM alone* falls towards 0 as s goes to 0, NTM improves NUE only
+through the correlations, and the claim "NTM already improves NUE" depends on the Irish estimates. If the
+extra gain from the NUE weight stays clearly positive at every s, the recommendation to add an NUE weight
+does not depend on them.
+
+# Recommended breeding plan
+
+Every number in this section is computed from the replicate table above (`r uniqueN(reps$replicate)` paired replicates,
+mean difference and paired t-test p per breed), or read from files 00-03. The parameters it
+rests on are listed in file 00 and the README.
+
+```{r plan_helpers, include=FALSE}
+fd <- function(cmp, v, d = 2) {                 # "HOL +0.52 (p = 0.06), JER ..." from pt
+  x <- pt[comparison == cmp & trait == v][order(breed)]
+  paste(sprintf("%s %+.*f (p %s)", x$breed, d, x$mean_diff,
+                ifelse(x$p_paired < 0.001, "< 0.001", sprintf("= %.3f", x$p_paired))), collapse = ", ")
+}
+rng <- function(cmp, v, d = 2) { x <- pt[comparison == cmp & trait == v]$mean_diff
+  sprintf("%.*f to %.*f", d, min(x), d, max(x)) }
+mdF <- function(s) { x <- reps[scenario == s, .(m = mean(dF)), by = breed]$m
+  sprintf("%.1f%% to %.1f%%", 100 * min(x), 100 * max(x)) }
+mv <- function(s, v, d = 2) { x <- reps[scenario == s, .(m = mean(get(v))), by = breed][order(breed)]
+  paste(sprintf("%s %.*f", x$breed, d, x$m), collapse = ", ") }
+# item 2: data-driven verdict on the NUE weight (added 3 Nov 2026, after the 5-replicate runs)
+n_sig <- function(cmp, v, dir = 1) pt[comparison == cmp & trait == v & p_paired < 0.05 & sign(mean_diff) == dir, .N]
+nue35_sig <- n_sig("GS_NTM_NUE35 - GS_NTM", "NUE"); nue75_sig <- n_sig("GS_NTM_NUE75 - GS_NTM", "NUE")
+ntm_sig <- pt[grepl("^GS_NTM_NUE(35|75) - GS_NTM$", comparison) & trait == "NTM" & p_paired < 0.05, .N]
+# expected NTM loss after 10 generations = (1 - theory share kept) x simulated GS_NTM response;
+# replicates needed to detect it (paired, two-sided 5%, power 80%): ((1.96 + 0.84) sd_diff / loss)^2
+ntm0 <- reps[scenario == "GS_NTM", .(NTM0 = mean(NTM)), by = breed]
+det <- merge(merge(fr[nue_weight %in% c(0.35, 0.75), .(breed, nue_weight, kept = NTM_pct_of_max / 100)], ntm0, by = "breed"),
+             pt[trait == "NTM" & grepl("^GS_NTM_NUE(35|75) - GS_NTM$", comparison),
+                .(breed, nue_weight = ifelse(grepl("35", comparison), 0.35, 0.75), sd_diff, mean_diff)],
+             by = c("breed", "nue_weight"))[, `:=`(loss = (1 - kept) * NTM0, se = sd_diff / sqrt(uniqueN(reps$replicate)))][
+             , n_need := ceiling(((1.96 + 0.84) * sd_diff / loss)^2)]
+det_txt <- function(w, col, d = 1) { x <- det[nue_weight == w][order(breed)]
+  paste(sprintf("%s %.*f", x$breed, d, x[[col]]), collapse = ", ") }
+acc_ix <- rbindlist(lapply(R, function(r) read_rep("index_correlations", "GS_NTM", r)), fill = TRUE)
+acc_txt <- function(v) { x <- acc_ix[trait == v, .(a = mean(acc_trait)), by = breed]$a
+  sprintf("%.2f to %.2f", min(x), max(x)) }
+th_gap <- if (exists("cmp_th")) cmp_th[, .(breed, nue_weight, gap = NUE_th / NUE0_th - NUE / NUE0)] else NULL
+th_txt <- function(w) { x <- cmp_th[nue_weight == w][order(breed)]
+  paste(sprintf("%s %.2f vs %.2f", x$breed, x$NUE / x$NUE0, x$NUE_th / x$NUE0_th), collapse = ", ") }
+```
+
+1. **Evaluation model.** `r mt <- if (file.exists("params/eval_model_test.csv")) fread("params/eval_model_test.csv") else NULL; ss_near <- cvs[!is.na(acc_wb) & model %in% c("ssGBLUP", "ssGBLUP_MF"), .(ok = max(acc_wb) >= cvs[trait == .BY$trait & scheme == .BY$scheme, max(acc_wb, na.rm = TRUE)] - 0.05), by = .(trait, scheme)]; ""`
+   *Cross-validation (file 02):* a single-step model (pooled-adjusted or metafounder) was the best
+   model or within 0.05 of the best in `r sum(ss_near$ok)` of `r nrow(ss_near)` trait x validation-scheme
+   comparisons. *Inside the breeding programme (04b, 2 replicates of GS_NTM_NUE35):*
+   `r if (!is.null(mt)) paste(ifelse(is.finite(mt$eval_sec_per_gen), sprintf("%s: NTM %+.2f, NUE %+.2f, %.0f s per evaluation (x%.1f)", mt$model, mt$NTM, mt$NUE, mt$eval_sec_per_gen, mt$time_ratio_vs_SNPBLUP), sprintf("%s: could not be run (killed for exceeding the ~6.1 GB memory limit of the local machine, 8 Nov 2026)", mt$model)), collapse = "; ") else "not available"`,
+   so **`r eval_model`** was used for all replicate runs (rule: ssGBLUP only if higher NTM and
+   not lower NUE response at no more than twice the run time). For routine evaluation the single-step
+   family remains the standard because it uses cows that have CFIT records but no genotypes; within
+   it, the compatibility method chosen in file 02 is listed in the cross-validation section.
+   Weighted ssGBLUP should not be used (over-dispersed EBVs).
+2. **Selection index: NTM already improves NUE. An added NUE weight raised NUE further
+   (significant in `r nue75_sig` of 3 breeds at 0.75, `r nue35_sig` of 3 at 0.35); its cost in
+   NTM was `r if (ntm_sig == 0) paste("not detectable in", uniqueN(reps$replicate), "replicates and is known only from theory") else paste("significant in", ntm_sig, "breed x weight comparisons")`.**
+   Over 10 generations, in genetic SD (NTM and EUR: genetic level after 10 generations,
+   EUR per cow-year):
+   * Under NTM alone (GS_NTM), NUE rose by `r mv("GS_NTM", "NUE")`, carried by protein yield
+     (r~g~ PY-NUE 0.80, Tavernier et al. 2024).
+   * Adding NUE at 0.35 (GS_NTM_NUE35 - GS_NTM): NUE `r fd("GS_NTM_NUE35 - GS_NTM", "NUE")`;
+     NTM value `r fd("GS_NTM_NUE35 - GS_NTM", "NTM", 1)` index units, i.e.
+     `r fd("GS_NTM_NUE35 - GS_NTM", "EUR", 1)` EUR per cow-year.
+   * Adding NUE at 0.75 (GS_NTM_NUE75 - GS_NTM): NUE `r fd("GS_NTM_NUE75 - GS_NTM", "NUE")`;
+     NTM value `r fd("GS_NTM_NUE75 - GS_NTM", "NTM", 1)` index units, i.e.
+     `r fd("GS_NTM_NUE75 - GS_NTM", "EUR", 1)` EUR per cow-year.
+   * Correlated changes at weight 0.35: CH4 `r fd("GS_NTM_NUE35 - GS_NTM", "CH4")`;
+     MUN `r fd("GS_NTM_NUE35 - GS_NTM", "MUN")`; milk yield `r fd("GS_NTM_NUE35 - GS_NTM", "MY")`.
+     Because the two indices differ only in the NUE weight, these are effects of that weight.
+   * Correlated changes at weight 0.75: CH4 `r fd("GS_NTM_NUE75 - GS_NTM", "CH4")`;
+     protein yield `r fd("GS_NTM_NUE75 - GS_NTM", "PY")`; Saved Feed `r fd("GS_NTM_NUE75 - GS_NTM", "SF")`.
+   * Under NTM alone, methane concentration *rose* (`r mv("GS_NTM", "CH4")`), through its
+     sourced positive correlations with yield (Schneider et al. 2025). NTM has no methane weight.
+   * **Why the NTM cost is not seen.** Selection-index theory (file 00) puts the NTM loss after
+     10 generations at about `r det_txt(0.35, "loss")` index units at weight 0.35 and
+     `r det_txt(0.75, "loss")` at 0.75. The replicate-to-replicate SD of the paired NTM
+     difference was `r det_txt(0.35, "sd_diff")` (0.35) and `r det_txt(0.75, "sd_diff")` (0.75),
+     so `r uniqueN(reps$replicate)` replicates `r if (ntm_sig == 0) "could not" else "could partly"` separate the loss from zero. To detect it (paired test, 5%,
+     power 80%) would take about `r det_txt(0.75, "n_need", 0)` replicates at weight 0.75 and
+     `r det_txt(0.35, "n_need", 0)` at 0.35. The positive NTM differences in some breeds cannot
+     be distinguished from noise and are not evidence of a gain.
+   * **Simulation vs theory for NUE.** NUE response relative to GS_NTM (simulated vs theory)
+     was `r th_txt(0.35)` at 0.35 and `r th_txt(0.75)` at 0.75.
+     `r gap <- cmp_th[, NUE / NUE0 - NUE_th / NUE0_th]; if (max(abs(gap)) <= 0.05) sprintf("The simulated and theoretical ratios agree within %.2f in every breed, so the simulated programme behaves as the index design intends.", max(abs(gap))) else sprintf("The largest gap is %.2f. Where the simulated gain is smaller than theory, this is consistent with selection on EBVs: theory assumes true breeding values, while under GS_NTM the accuracy of the cows' EBVs was %s for NUE against %s for protein yield, so part of the NUE weight is lost to prediction error (not tested directly).", max(abs(gap)), acc_txt("NUE"), acc_txt("PY"))`
+   Which weight to use is a price decision for the breeding organisation. Because the simulated
+   NTM cost is within noise, the price to use is the theoretical one in file 00 (EUR per cow-year
+   per unit selection intensity). The EUR figures cover only the simulated part of NTM (see
+   "What would change these conclusions").
+3. **MUN weight (GS_NTM_NUE35_MUN - GS_NTM_NUE35).** Adding MUN at -0.35 on top of NUE 0.35 changed
+   NUE by `r fd("GS_NTM_NUE35_MUN - GS_NTM_NUE35", "NUE")` and MUN by
+   `r fd("GS_NTM_NUE35_MUN - GS_NTM_NUE35", "MUN")`, at an NTM cost of
+   `r fd("GS_NTM_NUE35_MUN - GS_NTM_NUE35", "EUR", 1)` EUR per cow-year. Correa-Luna et al. (2021)
+   found that low-MUN breeding values did not improve NUE, and the relation of MUN to urinary N is
+   phenotypic, diet-driven and breed-specific (Mangwe et al. 2025; Burren et al. 2025), so a MUN weight
+   is justified only if urinary N or ammonia gets its own value in the breeding goal.
+4. **Methane weight (`r ch4_sc` - `r ch4_base`).** The CH4 weight `r idx_def[index == ch4_sc, ch4]` is the knee of the
+   sweep in file 00 (largest CH4 reduction per % NTM given up, selection-index theory). In the
+   simulation it changed CH4 by `r fd(paste(ch4_sc, "-", ch4_base), "CH4")`, NUE by
+   `r fd(paste(ch4_sc, "-", ch4_base), "NUE")` and NTM value by
+   `r fd(paste(ch4_sc, "-", ch4_base), "EUR", 1)` EUR per cow-year. Under NTM alone CH4 rose
+   (`r mv("GS_NTM", "CH4")`). Real-world context: Nordic and Norwegian evaluations of methane are being
+   developed from sniffer and GreenFeed data (Heringstad et al., ICAR 2026; Nielsen et al., ICAR 2026);
+   the CH4 trait here is a concentration-type trait with the correlations of file 00, so the size of
+   the response depends on those parameters.
+5. **One joint evaluation across Denmark, Sweden, Finland and Germany**, unless a GxE test on
+   real data shows a between-country r~g~ credibly below 0.80. In this simulation GxE of
+   r~g~ = 0.9 could not be estimated precisely from the subsample`r if (false_pos) ", and the likelihood-ratio test alone flagged GxE on the control data where none was simulated" else ""` (see the GxE section).
+6. **Optimum contribution selection with ΔF = 1% per generation, then mate allocation.**
+   Unconstrained genomic selection on the NTM + NUE 0.35 index raised inbreeding by
+   `r mdF("GS_NTM_NUE35")` per generation; OCS at 1% brought this to
+   `r mdF("GS_NTM_NUE35_OCS_dF1")`. The cost was NUE `r fd("GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35", "NUE")`
+   and NTM value `r fd("GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35", "EUR", 1)` EUR per cow-year.
+   `r ma <- dF[scenario == "GS_NTM_NUE35_MATE"]; nm <- dF[scenario == "GS_NTM_NUE35"]; if (nrow(ma)) sprintf("Mate allocation alone (single run) lowered genomic F after 10 generations (%s vs %s without it) but its rate of inbreeding was still %.1f%% to %.1f%% per generation, above the 1%% guideline (inbreeding section).", paste(sprintf("%s %.2f", ma$breed, ma$FT), collapse = ", "), paste(sprintf("%.2f", nm$FT[match(ma$breed, nm$breed)]), collapse = "/"), 100 * min(ma$dF_per_gen), 100 * max(ma$dF_per_gen)) else ""`
+7. **Records needed**, given the low h^2^ of NUE: CFIT feed intake for N intake, plus milk
+   protein and MUN from routine recording. Predicted NUE (MIR-based, Chen et al. 2021; or from
+   diet energy, diet CP, milk yield and milk protein, Padberg et al. 2026, CCC 0.78) is the
+   realistic phenotype; measured urinary N is not available at scale. In the multi-trait model,
+   accuracy of NUE EBVs of cows without NUE records was `r acc_s(nue_nm)`: modelling the genetic
+   covariances helped only in the unstructured (UN) model.
+
+# What would change these conclusions
+
+* Genetic correlations: `r nrow(fread("params/rg_sourced.csv"))` of 55 trait pairs are sourced
+  (`rg_evidence.xlsx`; most are proxies or from Norwegian Red, Polish or Dutch cattle rather than
+  the simulated breeds); the rest carry values implied by weighted bending, not estimates. All four
+  NUE correlations come from one grazing Irish study (Tavernier et al. 2024). With a lower
+  PY–NUE correlation, as Chen et al. (2021) imply for confinement Holstein, the NUE index
+  would gain more NUE over the production index.
+* The NTM part of the goal is partial: the simulated sub-indices carry
+  `r nw <- fread("params/ntm_weights_source.csv"); sh <- sapply(c("HOL", "RDC", "JER"), function(b) 100 * sum(nw[simulated_as != "not simulated"][[b]]) / sum(nw[[b]])); paste(sprintf("%s %.0f%%", names(sh), sh), collapse = ", ")`
+  of the total NTM weight (May 2026). The non-simulated
+  sub-indices (calving, health, conformation, growth, youngstock survival) would take selection
+  pressure, so absolute responses and EUR values here are too large; fat yield is missing from
+  Yield; Jersey uses the Holstein milk:protein ratio; Saved Feed enters with its own published
+  parameters (ReFI h^2^, NAV Saved Feed index correlations), not computed from ECM, body-weight change
+  and DMI, because no kg-scale variances were available for that formula (file 00).
+* Founder sampling: each replicate has its own founders, so this source of variation is included;
+  the coalescent demography (Ne history, breed split times) is the same for all replicates.
+* A full-size run (all 25,614 cows genotyped) on a cluster, which would also allow GxE to be
+  estimated.
+
+```{r session}
+sessionInfo()
+```

@@ -1,0 +1,691 @@
+---
+title: "00 - Verified genetic parameters for the NUE breeding simulation"
+subtitle: "Holstein / Red Dairy Cattle / Jersey x Denmark / Sweden / Finland / Germany"
+author: "Prepared for Emmanuel Ismaila"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    code_folding: show
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+library(data.table)
+library(knitr)
+```
+
+# Purpose and rules
+
+This file is the **single source of truth** for every genetic parameter used downstream
+(`01_founders_burnin.Rmd` onwards). Rules applied:
+
+1. A value enters the simulation only if it was read from the cited source (status `VERIFIED`).
+2. Values from outside the Nordic countries are allowed only from neighbouring European
+   populations, and are labelled `VERIFIED-EU` (or `VERIFIED-NON-EU` if no European estimate was found).
+3. Where a source reports a **range**, the midpoint is used and the range is kept so it can
+   be swept in sensitivity analysis. The midpoint is a modelling choice, not a published value.
+4. Anything not yet read from a primary source is `PENDING` and is **not** used until resolved.
+
+# Population sizes
+
+**Basis (revised 7 Nov 2026, at your request):** the CFIT installation numbers reported by
+Lassen & Borchersen, *Cattle FeedInTake* (presentation "3.2 CFIT Cattle 3D cameras", installations
+as of May 2026): **28,400 cows** - 8,100 Red Dairy Cattle (12 farms), 8,300 Jersey (11 farms) and
+12,000 Holstein (16 farms) - in 4 countries. Known allocations from the same slide: 2 RDC farms
+with 500 cows in Finland, 2 RDC farms with 500 cows in Sweden, 2 Holstein farms with 750 cows in
+Germany (country assignment of these three groups as you specified). The breed labels of the three
+rows (8,100 / 8,300 / 12,000) are your mapping; the slide shows the numbers without breed names.
+This replaces the ICAR 2026 abstract (25,614 cows; Lassen, Thomasen & Borchersen).
+
+```{r popsize}
+totals <- data.table(breed = c("RDC", "JER", "HOL"), n_cows = c(8100, 8300, 12000), n_farms = c(12, 11, 16))
+n_breed <- setNames(totals$n_cows, totals$breed)[c("HOL", "RDC", "JER")]
+N_total <- sum(n_breed)
+stopifnot(N_total == 28400)
+totals[, proportion := round(n_cows / N_total, 4)][]
+```
+
+**Allocation to countries (your rule, 7 Nov 2026).** Within each breed, the cows and farms not
+covered by the known allocations are split **equally** over the four countries, and the known
+cows/farms are added to their country. Germany is coded `DEU` (ISO 3166), the code used by every
+file of the pipeline; it is your `GER`.
+
+```{r country_split}
+countries <- c("DNK", "SWE", "FIN", "DEU")
+nC <- length(countries)
+known <- data.table(country = c("FIN", "SWE", "DEU"), breed = c("RDC", "RDC", "HOL"),
+                    cows = c(500, 500, 750), farms = c(2, 2, 2))
+alloc <- rbindlist(lapply(totals$breed, function(b) {
+  k <- known[breed == b]
+  rem_c <- totals[breed == b, n_cows] - sum(k$cows); rem_f <- totals[breed == b, n_farms] - sum(k$farms)
+  d <- data.table(breed = b, country = countries, cows_exact = rem_c / nC, farms_exact = rem_f / nC)
+  d[k, on = "country", `:=`(cows_exact = cows_exact + i.cows, farms_exact = farms_exact + i.farms)]
+  d
+}))
+kable(dcast(alloc, country ~ breed, value.var = "cows_exact"), caption = "Cows, exact allocation (your formula)")
+kable(dcast(alloc, country ~ breed, value.var = "farms_exact"), digits = 2, caption = "Farms, exact allocation (your formula)")
+```
+
+**Rounding (your choices, 7 Nov 2026).** Both use the largest-remainder (Hamilton) method:
+floor every cell, then give the units still missing to the cells with the largest fractional
+parts; ties are broken by country order DNK, SWE, FIN, DEU.
+
+* **Cows:** within each breed, so breed totals stay 8,100 / 8,300 / 12,000. Only Holstein has
+  fractions (x.5 in every country), so DNK and SWE round up and FIN and DEU round down.
+* **Farms:** the reported 39 farms (12 + 11 + 16) are scaled to **40**, inside the reported range of
+  39 farms (breed rows) to 42 herds ("42 herds in 4 countries", same slide), by multiplying every
+  cell by 40/39 and apportioning 40 farms over all 12 breed x country cells.
+
+```{r rounding}
+lr_round <- function(x, total, order_key) {     # largest remainder; ties by order_key
+  f <- floor(x); left <- total - sum(f)
+  o <- order(-(x - f), order_key)
+  if (left > 0) f[o[seq_len(left)]] <- f[o[seq_len(left)]] + 1
+  f
+}
+ckey <- match(alloc$country, countries)
+alloc[, n := lr_round(cows_exact, sum(cows_exact), ckey[.I]), by = breed]
+n_herds_total <- 40
+alloc[, farms := lr_round(farms_exact * n_herds_total / sum(farms_exact), n_herds_total, ckey)]
+split <- alloc[, .(breed, country, n, farms)]
+kable(dcast(split, country ~ breed, value.var = "n")[, total := HOL + JER + RDC][], caption = "Cows per country and breed (simulated)")
+kable(dcast(split, country ~ breed, value.var = "farms")[, total := HOL + JER + RDC][], caption = "Herds per country and breed (simulated)")
+stopifnot(sum(split$n) == N_total, sum(split$farms) == n_herds_total,
+          all(split[, sum(n), by = breed][order(breed)]$V1 == totals[order(breed)]$n_cows))
+split[, .(farms = sum(farms)), by = breed]
+```
+
+The farm rounding changes the breed totals from 12 / 11 / 16 (RDC / Jersey / Holstein) to the
+values in the last table; scaling to 40 farms is your choice, the split follows mechanically from
+the rule.
+
+## Herds (blocks)
+
+**Herds are single-breed (your choice, 7 Nov 2026)**, as the CFIT farm counts are per breed. Each
+breed x country cell gets the number of herds above, and its cows are spread evenly over them.
+This replaces the earlier 32 mixed-breed herds (8 per country). Consequence for files 02-04: herd
+is nested in breed, so the herd x generation fixed effects absorb the breed effect; within-breed
+ranking is unaffected.
+
+```{r herds}
+farms <- split[farms > 0, .(herd = sprintf("%s_%s_H%02d", country, breed, seq_len(farms)), n_cows_herd = n / farms),
+               by = .(breed, country)]
+kable(farms[, .(herds = .N, mean_cows_per_herd = round(mean(n_cows_herd))), by = .(breed, country)],
+      caption = "Herds and mean herd size per breed x country")
+stopifnot(nrow(farms) == n_herds_total)
+```
+
+## Germany and the NAV evaluation
+
+The NAV documentation (May 2024) describes a **joint Denmark-Sweden-Finland** evaluation.
+Germany is not part of it, so NAV's "common genetic parameters for all countries" assumption
+does not cover German herds. That makes the GxE sensitivity scenario (below) more relevant
+for DEU than for the three NAV countries.
+
+# Heritabilities
+
+```{r h2_table}
+h2 <- fread(text = "
+trait|code|HOL|RDC|JER|range_low|range_high|status|population|source
+305-d milk yield, 1st lactation|MY|0.43|0.39|0.44|NA|NA|VERIFIED|NAV joint DK-SE-FI evaluation|NAV routine genetic evaluation, May 2024, Tables 4.1-4.3
+305-d protein yield, 1st lactation (substitute for protein %)|PY|0.35|0.33|0.38|NA|NA|VERIFIED|NAV joint DK-SE-FI evaluation|NAV routine genetic evaluation, May 2024, Tables 4.1-4.3
+Saved Feed (feed efficiency; NAV index = 0.40 ECM + 4.0 dBW - DMI)|SF|0.23|0.23|0.23|0.17|0.29|PROXY-NORDIC (ReFI, a feed-saved metric; Nordic Red only; +-1 SE as range)|Finnish Nordic Red, 654 primiparous cows|Lidauer et al. 2023, Animal 17:100917, Table 2 (ReFI h2 0.23, SE 0.06)
+Somatic cell count, test-day|SCS|0.095|0.115|0.095|0.06|0.14|VERIFIED (midpoint)|Nordic HOL/RDC (SE) and JER (DK)|Vargas Jurado et al. 2026, J Dairy Sci 109:6387-6400; NAV May 2024 Sec. 8 (0.08-0.15)
+Resilience: log-variance of daily milk deviations|LNVAR|0.22|0.22|0.22|0.20|0.24|VERIFIED-EU (midpoint)|Dutch AMS herds, 198,754 1st-parity cows|Poppe, Mulder & Veerkamp, ADSA 2019 abstract #286
+Interval calving-first insemination, 1st lact.|ICF|0.05|0.04|0.04|NA|NA|VERIFIED|NAV joint DK-SE-FI evaluation|NAV routine genetic evaluation, May 2024, Table 6.x
+Longevity (NAV longevity model)|LONG|0.056|0.056|0.056|0.022|0.090|VERIFIED (midpoint, via review)|Danish dairy cattle|Clasen et al. 2017 as tabulated in Hu et al. 2021, Front Genet 12:695543
+Milk urea (test-day MU, mmol/L)|MUN|0.22|0.24|0.18|NA|NA|VERIFIED|Danish Holstein 323,800 / Jersey 70,634 / Red 27,870 cows, routine recording 2019-2020|Buitenhuis & Poulsen 2023, J Dairy Sci 106:5562-5569, Table 2 (SE 0.004 / 0.01 / 0.01)
+Predicted nitrogen use efficiency|NUE|0.13|0.13|0.13|0.12|0.14|VERIFIED-EU (midpoint)|Holstein, 154 farms in 5 European countries|Chen et al. 2021, J Dairy Sci 104:4413-4423
+Enteric methane concentration in breath (CH4_C, daily, sniffer)|CH4|0.175|0.175|0.175|0.16|0.19|VERIFIED-DK, Holstein only (midpoint of parity groups)|Danish Holstein, 4,019 cows, 9 commercial farms, 587,640 daily records|Schneider et al. 2025, J Dairy Sci 108:12519-12530, Table 2 (PP 0.19 SE 0.03; MLP 0.16 SE 0.02)
+305-d fat yield, 1st lactation (completes the NTM Yield sub-index; added 7 Nov 2026)|FY|0.36|0.34|0.35|NA|NA|VERIFIED|NAV joint DK-SE-FI evaluation|NAV routine genetic evaluation, May 2024, Tables 4.1-4.3
+Udder conformation (represented by udder depth, 1st lactation; highest correlation with the NAV udder index: 0.86 / 0.72 / 0.87)|UDC|0.39|0.34|0.34|NA|NA|VERIFIED (representative component)|NAV joint evaluation|NAV routine genetic evaluation, May 2024, Tables 11.3-11.5 and 11.10
+Birth index (represented by direct stillbirth, 1st calving; correlation with the birth index 0.96 / 0.95 / 0.95)|BI|0.040|0.058|0.034|NA|NA|VERIFIED (representative component)|NAV joint evaluation|NAV routine genetic evaluation, May 2024, Tables 7.4 and 7.10
+Calving index (represented by maternal stillbirth, 1st calving; correlation with the calving index 0.96 / 0.93 / 0.90)|CI|0.036|0.038|0.023|NA|NA|VERIFIED (representative component)|NAV joint evaluation|NAV routine genetic evaluation, May 2024, Tables 7.3 and 7.9
+General health (represented by other metabolic diseases, 1st lactation; highest correlation with the general health index 0.83 / 0.81 / 0.88)|GH|0.006|0.003|0.004|NA|NA|VERIFIED (representative component)|NAV joint evaluation|NAV routine genetic evaluation, May 2024, Tables 9.3-9.5; NAV routine evaluation 2020, Table 41
+Claw health (represented by sole ulcer, 1st lactation; correlation with the claw index 0.80 / 0.83 / 0.90)|CLAW|0.036|0.020|0.019|NA|NA|VERIFIED (representative component)|NAV joint evaluation|NAV routine genetic evaluation, May 2024, Tables 10.2-10.4 and 10.13
+Youngstock survival (represented by component HP2 in NAV notation, the component with the highest correlation with the index, 0.89-0.98)|YS|0.011|0.023|0.012|NA|NA|VERIFIED (representative component)|NAV joint evaluation|NAV routine genetic evaluation, May 2024, Tables 13.1-13.3 and 13.5
+")
+# Dropped on 7 Nov 2026 (your decisions, 21:50 and 21:54): birth index, calving index, general health, youngstock
+# survival, claw health and udder conformation, because most of their correlations with the other traits are unpublished. Their heritability rows
+# are kept above for the record, but they are not simulated, and every correlation pair with them is removed.
+dropped <- c("BI", "CI", "GH", "YS", "CLAW", "UDC")   # CLAW and UDC dropped at 21:54, same reason
+h2_dropped <- h2[code %in% dropped]; h2 <- h2[!code %in% dropped]
+kable(h2, caption = "Heritabilities used in the simulation (breed-specific where published)")
+kable(h2_dropped[, .(trait, code, HOL, RDC, JER, source)], caption = "Traits considered on 7 Nov 2026 and dropped the same day (not simulated)")
+```
+
+## What these values are not
+
+* **Protein %**: the NAV document computes protein % from yield EBVs and publishes no
+  heritability for it, so protein **yield** is used (your choice of Nordic equivalents).
+* **Saved Feed (SF)** replaces feeding rate (7 Nov 2026, your request). NAV computes Saved Feed as
+  an index of breeding values, GEBV~SF~ = 0.40 GEBV~ECM~ + 4.0 GEBV~dBW~ - GEBV~DMI~
+  (Stephansen et al. 2025, Interbull Bull 61:224-228), so no heritability of Saved Feed itself is
+  published. Your formula route could not be evaluated: no paper supplied gives the genetic
+  variances of ECM or dBW in kg, or their correlations with the other model traits. Your choice:
+  SF's own published values. h^2^ is the regression-on-expected-feed-intake metric (ReFI) of
+  Lidauer et al. (2023), whose breeding values "equal percentages of feed saved" - Nordic Red only,
+  applied to all breeds (flagged). DMI, ECM and body weight are **not** model traits (your choice);
+  the DMI heritability of Manzanilla-Pech et al. (2023) and their DMI-BW correlation (0.58-0.65,
+  your preferred source) are therefore no longer used.
+* **MUN** (updated 1 Nov 2026 from the PDF you supplied): Buitenhuis & Poulsen (2023, J Dairy Sci
+  106:5562-5569) estimated breed-specific heritabilities for milk urea in the Danish milk recording
+  system: Holstein 0.22, Red 0.24, Jersey 0.18. These replace the earlier Belgian/Dutch value
+  of 0.32 (Atashi & Hostens 2021), which is kept here only for reference. Two further findings
+  from that paper bear on the simulation and are not yet used: herd-test-day explained 49-54% of
+  milk urea variance (the simulation uses a generic 15% herd effect), and the authors note that
+  MUN breeding values were not shown to reduce total urinary N excretion (citing Marshall et al. 2021).
+* **CH4** (added 1 Nov 2026 at your request, from the PDF you supplied): daily methane
+  concentration in breath from sniffers in automatic milking systems, Schneider et al. (2025).
+  Three limitations, all flagged:
+  (i) the estimates are for **Danish Holstein only** and are applied to Red and Jersey;
+  (ii) heritability is the midpoint of the parity groups (0.19 primiparous, 0.16 multiparous);
+  (iii) the genetic correlations with milk and protein yield are the **multiparous** values,
+  because the primiparous estimate for milk yield was not significant (0.14, SE 0.12) and the
+  primiparous protein-yield model did not converge. The paper notes the association is likely
+  mediated by feed intake; DMI is not a model trait (7 Nov 2026), and no CH4-Saved Feed
+  correlation has been published. The trait is a *concentration* (ppm), not methane production
+  in g/day.
+* **NUE** in Chen et al. is *predicted* from mid-infrared spectra, consistent with the
+  decision to treat urinary N as a predicted (not measured) trait.
+
+# Genetic correlations
+
+Only correlations read from a source are entered (revised 4 Nov 2026 under your rules; every
+candidate, its DOI and why it passed or failed is in `rg_evidence.xlsx`). Rules: an approximate
+(EBV/index) correlation only if estimated in a Nordic breed; genuine genetic correlations only from
+European studies; Danish over Polish, recent over old; resilience from Poppe et al. (2020, Dutch,
+MACE) as an explicit exception, quantile-regression version (chosen in `00b_rg_update_check.Rmd`).
+Added 7 Nov 2026 (your rules): EU estimates from the last 5 years in HOL, RDC or JER are searched
+first; if none exists, an older Nordic estimate is accepted; only then does a pair stay unknown.
+Methane index correlations from Norwegian Red (Heringstad et al. 2026; methane g/day, not
+concentration) are used for the new NTM traits, flagged (your choice). The candidates searched on
+7 Nov, with the reason each passed or failed, are in `params/rg_candidates_7nov.csv`.
+**Traits added on 7 Nov 2026:** fat yield (kept). Udder conformation, birth index, calving index,
+general health, claw health and youngstock survival were added and then dropped the same evening
+(your decision): most of their correlations with the other traits are unpublished.
+Unknown pairs start at 0 and are then set by the weighted bending below. Signs follow the model:
+high SCS, ICF and LNVAR are unfavourable, high LONG favourable; "reversed" marks a source that
+reports against an index where high is good, or against culling (the inverse of longevity).
+
+```{r rg}
+traits <- h2$code
+RG <- diag(length(traits)); dimnames(RG) <- list(traits, traits)
+wmean <- function(v) { v <- v[!is.na(v)]; sum(n_breed[names(v)] * v) / sum(n_breed[names(v)]) }   # CFIT cows per breed; breeds without a value are left out
+rg_src <- fread(text = "
+t1|t2|rg|status|source
+MY|PY|0.86|VERIFIED (HOL; RDC 0.86; JER 0.91)|NAV May 2024, 1st-lactation tables
+MY|NUE|0.52|VERIFIED-EU (NUEtot; grazing Irish Holstein-Friesian, 1,291 cows; SE 0.11)|Tavernier et al. 2024, J Dairy Sci 107:2231-2240, Table 2
+PY|NUE|0.80|VERIFIED-EU (NUEtot; same population; SE 0.07)|Tavernier et al. 2024, Table 2
+MUN|NUE|-0.12|VERIFIED-EU (NUEtot; same population; SE 0.17, not different from 0)|Tavernier et al. 2024, Table 2
+MY|CH4|0.33|VERIFIED-DK Holstein, multiparous (PP 0.14 SE 0.12, not significant)|Schneider et al. 2025, Table 5 (SE 0.09)
+PY|CH4|0.46|VERIFIED-DK Holstein, multiparous (PP model did not converge)|Schneider et al. 2025, Table 5 (SE 0.09)
+PY|LONG|0.41|PROXY-NORDIC (1st-lactation culling vs 305-d protein yield -0.41, reversed)|Holtsmark et al. 2008, J Dairy Sci 91:4006-4012 (Norwegian Red)
+SCS|LONG|-0.20|PROXY-NORDIC (culling vs lactation mean SCS 0.20, reversed)|Holtsmark et al. 2008
+ICF|LONG|-0.15|PROXY-NORDIC (culling vs calving-first insemination 0.15, reversed)|Holtsmark et al. 2008
+SCS|CH4|0.06|PROXY-DK (udder health 0-50 d vs CH4 production, SE 0.19)|Zetouni et al. 2018, J Dairy Sci 101:2273-2280, Table 5
+ICF|CH4|0.17|VERIFIED-DK (calving-first insemination vs CH4 production, SE 0.13)|Zetouni et al. 2018, Table 5
+PY|SCS|0.22|VERIFIED-NORDIC (first-parity Swedish Red, REML, SE 0.017)|Buch et al. 2011, J Anim Breed Genet 128:174-182, Table 4
+PY|ICF|0.30|VERIFIED-NORDIC (days calving to first insemination, SE 0.025)|Buch et al. 2011, Table 4
+SCS|ICF|0.15|VERIFIED-NORDIC (SE 0.038)|Buch et al. 2011, Table 4
+SCS|MUN|-0.14|VERIFIED-EU (lactation-1 mean of daily rg)|Rzewuska & Strabel 2013, J Appl Genet 54:473-482, Table 3 (Polish HF)
+MY|LNVAR|0.64|APPROX-EU exception (MACE, quantile regression)|Poppe et al. 2020, J Dairy Sci 103:1667-1684, Table 2.6 (Dutch HOL)
+SCS|LNVAR|0.32|APPROX-EU exception (LnVar vs udder health index -0.32, reversed)|Poppe et al. 2020, Table 2.6
+LNVAR|ICF|0.40|APPROX-EU exception (LnVar vs fertility index -0.40, reversed)|Poppe et al. 2020, Table 2.6
+LNVAR|LONG|-0.16|APPROX-EU exception (MACE)|Poppe et al. 2020, Table 2.6
+FY|NUE|0.18|VERIFIED-EU (NUEtot vs fat yield; SE 0.17) - added 7 Nov 2026|Tavernier et al. 2024, Table 2
+CH4|SF|-0.32|VERIFIED-DK Holstein (breath methane concentration MeC vs RFI2 0.32, SE 0.17; reversed, Saved Feed = feed saved) - added 7 Nov 2026|Manzanilla-Pech et al. 2022, Front Genet 13:885932, Table 4
+CH4|GH|0.32|PROXY-DK (CH4 production vs other diseases -0.32, SE 0.16; reversed into health) - added 7 Nov 2026|Zetouni et al. 2018, Table 5
+CH4|BI|-0.23|APPROX-NORDIC (Norwegian Red CH4 g/d, flagged: not concentration; calving ease direct, favourable) - your choice 7 Nov 2026|Heringstad et al. 2026, ICAR Verona (slides)
+CH4|CLAW|0.00|APPROX-NORDIC (Norwegian Red CH4 g/d; reported as approximately 0) - your choice 7 Nov 2026|Heringstad et al. 2026, ICAR Verona (slides)
+CH4|UDC|0.00|APPROX-NORDIC (Norwegian Red CH4 g/d; udder conformation reported as approximately 0) - your choice 7 Nov 2026|Heringstad et al. 2026, ICAR Verona (slides)
+CH4|FY|0.45|VERIFIED-DK Holstein, multiparous (CH4 concentration vs fat yield, SE 0.10; PP 0.13, SE 0.13, not significant) - replaces Heringstad 2026 index value 0.29, 7 Nov 2026|Schneider et al. 2025, J Dairy Sci 108:12519-12530, Table 5
+SCS|UDC|-0.30|VERIFIED-NORDIC (range -0.20 to -0.40 stated in the text; midpoint) - added 7 Nov 2026|NAV routine genetic evaluation, May 2024, Section 8
+")
+# Milk urea: Danish breed-specific values (Buitenhuis & Poulsen 2023, Table 3), one matrix for all breeds,
+# so combined with the CFIT cow numbers per breed (revised 7 Nov 2026: 28,400 cows)
+mu_src <- data.table(t1 = c("MY", "PY"), t2 = "MUN",
+  HOL = c(-0.14, 0.16), RDC = c(-0.07, 0.10), JER = c(-0.07, 0.04))
+# Fat yield with milk and protein yield: NAV May 2024, Tables 4.1-4.3, breed-specific, CFIT-cow-weighted
+fy_src <- data.table(t1 = c("MY", "PY"), t2 = "FY", sign = 1,
+  HOL = c(0.46, 0.67), RDC = c(0.71, 0.78), JER = c(0.74, 0.86))
+# Saved Feed: NAV index correlations between Saved Feed and NTM sub-indices, genomic bull calves
+# (NAV 2026, "Economic weight of Saved feed in NTM", Table 4). Index direction: high = favourable,
+# so Fertility and Udder health are reversed for ICF and SCS. The Yield-index correlation is applied to
+# both MY and PY (your choice, 7 Nov 2026; flagged: NTM Yield gives milk volume a negative value).
+# Since 7 Nov 2026 also fat yield (Yield index, as MY and PY) and the six new sub-index traits, which are
+# coded in index direction (high = favourable), so no reversal. Jersey youngstock survival is not reported.
+sf_src <- data.table(t1 = c("MY", "PY", "ICF", "SCS", "LONG", "FY", "BI", "CI", "GH", "CLAW", "UDC", "YS"), t2 = "SF",
+  index = c("Yield", "Yield", "Fertility", "Udder health", "Longevity", "Yield", "Birth index", "Calving index",
+            "General health", "Claw health", "Udder", "Youngstock survival"), sign = c(1, 1, -1, -1, 1, 1, 1, 1, 1, 1, 1, 1),
+  HOL = c(0.32, 0.32, -0.06, -0.11, -0.02, 0.32, 0.05, -0.06, -0.11, -0.10, -0.12, 0.06),
+  RDC = c(0.13, 0.13, 0.06, 0.00, 0.15, 0.13, 0.12, 0.04, -0.16, 0.03, -0.11, 0.11),
+  JER = c(0.35, 0.35, -0.17, -0.08, -0.08, 0.35, 0.19, -0.01, -0.13, -0.04, -0.26, NA))
+kable(sf_src, caption = "Saved Feed: NAV index correlations per breed (sign = reversal into model direction)")
+wrow <- function(d) d[, rg := round(sign * mapply(function(h, r, j) wmean(c(HOL = h, RDC = r, JER = j)), HOL, RDC, JER), 2)]
+sf_src <- sf_src[!t1 %in% dropped]
+mu_src[, sign := 1]; wrow(mu_src); wrow(sf_src); wrow(fy_src)
+rg_src <- rbind(rg_src,
+  mu_src[, .(t1, t2, rg, status = c(sprintf("VERIFIED-DK (CFIT-cow-weighted mean of DH %.2f, DR %.2f, DJ %.2f)", HOL[1], RDC[1], JER[1]),
+                                    sprintf("PROXY-DK (milk urea vs protein %%: DH %.2f, DR %.2f, DJ %.2f, CFIT-cow-weighted)", HOL[2], RDC[2], JER[2])),
+             source = c("Buitenhuis & Poulsen 2023, Table 3; weights = CFIT cows per breed (Lassen & Borchersen, CFIT 2026)",
+                        "Buitenhuis & Poulsen 2023, Table 3 (your choice 4 Nov over Polish protein yield 0.19)"))],
+  sf_src[, .(t1, t2, rg, status = sprintf("APPROX-NORDIC (Saved Feed index vs %s index%s; HOL %.2f, RDC %.2f, JER %.2f; CFIT-cow-weighted)",
+                                           index, ifelse(sign < 0, ", reversed", ""), HOL, RDC, JER),
+             source = "NAV 2026, Economic weight of Saved feed in NTM, Table 4 (genomic bull calves)")],
+  fy_src[, .(t1, t2, rg, status = sprintf("VERIFIED (HOL %.2f, RDC %.2f, JER %.2f; CFIT-cow-weighted) - added 7 Nov 2026", HOL, RDC, JER),
+             source = "NAV routine genetic evaluation, May 2024, Tables 4.1-4.3")])
+# --- added 7 Nov 2026 (evening) from the documents you supplied ---
+# (a) Carlen et al. 2004 (Swedish Holstein, 1st lactation, REML, Table 4): MILK-LSCS 0.22 (SE 0.04), FAT-LSCS 0.17 (SE 0.04)
+# (b) NAV maternal-direct calving correlations are set to 0 in the routine model (NAV routine evaluation 2020/2024, Sec. 7)
+extra_src <- fread(text = "
+t1|t2|rg|status|source
+MY|SCS|0.22|VERIFIED-NORDIC (Swedish Holstein, lactation-average SCS, SE 0.04) - added 7 Nov 2026|Carlen, Strandberg & Roth 2004, J Dairy Sci 87:3062-3070, Table 4
+FY|SCS|0.17|VERIFIED-NORDIC (Swedish Holstein, SE 0.04) - added 7 Nov 2026|Carlen, Strandberg & Roth 2004, Table 4
+CLAW|PY|-0.20|VERIFIED-NORDIC (sole ulcer vs protein yield 0.20, SE 0.07; reversed into claw health) - added 7 Nov 2026|Buch et al. 2011, J Dairy Sci 94:1540-1551, Table 4 (Swedish Red)
+CLAW|SCS|-0.14|VERIFIED-NORDIC (sole ulcer vs SCS 0.14, SE 0.08, not significant; reversed) - added 7 Nov 2026|Buch et al. 2011, Table 4
+CLAW|ICF|-0.33|VERIFIED-NORDIC (sole ulcer vs days calving-first insemination 0.33, SE 0.10; reversed) - added 7 Nov 2026|Buch et al. 2011, Table 4
+GH|SCS|-0.32|PROXY-DK, double proxy (diseases other than mastitis 0-100 d vs clinical mastitis 0-50 d, 0.32, SE 0.07; mastitis for SCS; reversed into health) - added 7 Nov 2026|Lassen et al. 2003, J Dairy Sci 86:3730-3735, Table 4 (Danish Holstein)
+MUN|ICF|-0.11|VERIFIED-NORDIC (Swedish Holstein, 1st lactation; mean over 5-305 DIM of the random-regression curve MUN-CFI, read from Figure 2: about 0 early to -0.21 at d 300) - your choice 8 Nov 2026|Mucha & Strandberg 2011, J Dairy Sci 94:5665-5672, Figure 2
+MUN|FY|0.09|VERIFIED-NORDIC (Swedish Holstein, 1st lactation; mean over 5-305 DIM of the curve MUN-fat yield, read from Figure 3: 0.15-0.18 early to -0.12 at d 305) - your choice 8 Nov 2026|Mucha & Strandberg 2011, Figure 3
+BI|CI|0.00|NAV MODEL ASSUMPTION (maternal-direct genetic correlation set to zero by NAV; not an estimate) - added 7 Nov 2026|NAV routine genetic evaluation 2020 and May 2024, Section 7
+")
+# (c) NAV Yield index vs the other NTM sub-indices (index correlations, genotyped bull calves born 2017;
+#     Jersey 2017-2018): Nielsen et al. 2020, NAV note 'Effect of including Feed Saved in NTM', Table 3.
+#     Applied to MY, PY and FY alike (same rule as your SF-Yield choice), and only to pairs without a
+#     genetic-correlation estimate (genuine estimates outrank index correlations).
+yi_src <- data.table(t2 = c("ICF", "BI", "CI", "GH", "UDC", "LONG", "CLAW", "YS"),
+  index = c("Fertility", "Birth", "Calving", "General health", "Udder", "Longevity", "Claw health", "Young stock survival"),
+  sign = c(-1, 1, 1, 1, 1, 1, 1, 1),
+  HOL = c(-0.34, -0.10, -0.09, -0.21, -0.15, -0.16, -0.11, -0.05),
+  RDC = c(-0.20, -0.06, -0.02, -0.14, -0.12, 0.05, -0.10, 0.01),
+  JER = c(-0.31, -0.03, 0.06, -0.10, -0.26, -0.06, -0.10, NA))
+yi_src <- rbindlist(lapply(c("MY", "PY", "FY"), function(y) cbind(t1 = y, yi_src)))
+wrow(yi_src)
+cat("Removed on 7 Nov 2026: DMI (7 pairs) and feeding rate (no sourced pairs) are no longer model traits.\n")
+pkey <- function(a, b) paste(pmin(a, b), pmax(a, b), sep = "-")
+rg_src <- rbind(rg_src, extra_src)
+keep_pair <- function(d) d[!(t1 %in% dropped | t2 %in% dropped)]       # drop pairs with the dropped traits
+rg_src <- keep_pair(rg_src); yi_src <- keep_pair(yi_src)
+yi_add <- yi_src[!pkey(t1, t2) %in% pkey(rg_src$t1, rg_src$t2)]
+rg_src <- rbind(rg_src, yi_add[, .(t1, t2, rg,
+  status = sprintf("APPROX-NORDIC (Yield index vs %s index%s; HOL %.2f, RDC %.2f, JER %s; CFIT-cow-weighted) - added 7 Nov 2026",
+                   index, ifelse(sign < 0, ", reversed", ""), HOL, RDC, ifelse(is.na(JER), "n/a", sprintf("%.2f", JER))),
+  source = "Nielsen et al. 2020, NAV note 'Effect of including Feed Saved in NTM', Table 3 (bull calves born 2017)")])
+stopifnot(!anyDuplicated(pkey(rg_src$t1, rg_src$t2)))
+for (i in seq_len(nrow(rg_src))) {
+  RG[rg_src$t1[i], rg_src$t2[i]] <- RG[rg_src$t2[i], rg_src$t1[i]] <- rg_src$rg[i]
+}
+kable(rg_src, caption = "Sourced genetic correlations")
+RG_input <- RG
+round(RG, 2)
+
+# Positive-definiteness check (required by AlphaSimR::addTraitA corA argument)
+ev <- eigen(RG, symmetric = TRUE, only.values = TRUE)$values
+cat("Smallest eigenvalue of the assembled matrix:", round(min(ev), 4), "\n")
+```
+
+## Weighted bending (your choice, 4 Nov 2026)
+
+Correlations from different studies need not form a valid (positive-definite) matrix, and here
+they do not: with the unknown pairs at 0, the smallest eigenvalue is strongly negative. The cause
+is that some zeros are mathematically impossible next to published values, e.g. with
+r~g~(MY,PY) = 0.86 and r~g~(MY,LNVAR) = 0.64, r~g~(PY,LNVAR) must be at least about 0.16.
+Ordinary bending (used until 3 Nov) would move published values by up to 0.12. **Weighted bending**
+(Jorjani, Klei & Emanuelson 2003, J Dairy Sci 86:677-679) is used instead: each iteration moves the
+matrix towards its nearest positive-definite projection, with the step for each element divided by
+its weight - 100 for published values, 1 for unknown pairs - so the unknown pairs absorb the
+correction. The unknown pairs therefore end with **implied** values: not estimates from any study,
+but the values the published correlations force. This is the same logic as the bounds of Olkin
+(1981) for a missing correlation given two known ones,
+r~xy~r~xz~ - sqrt((1 - r~xy~^2^)(1 - r~xz~^2^)) <= r~yz~ <= r~xy~r~xz~ + sqrt((1 - r~xy~^2^)(1 - r~xz~^2^)),
+which Negussie et al. (2017, J Dairy Sci 100:2433-2453) propose for filling unknown correlations of
+methane proxies. Every change is reported below.
+
+```{r bend}
+wbend <- function(R, Wt, floor = 1e-3, beta = 0.1, maxit = 1e6) {   # Jorjani et al. 2003
+  Wi <- 1 / Wt; diag(Wi) <- 0
+  for (it in seq_len(maxit)) {
+    e <- eigen(R, symmetric = TRUE)
+    if (min(e$values) >= floor) break
+    P <- e$vectors %*% diag(pmax(e$values, 1.5 * floor)) %*% t(e$vectors)
+    R <- R - beta * (R - P) * Wi; R <- (R + t(R)) / 2; diag(R) <- 1
+  }
+  dimnames(R) <- dimnames(RG_input); R
+}
+Wt <- matrix(1, length(traits), length(traits), dimnames = dimnames(RG_input))
+Wt[RG_input != 0] <- 100
+RG <- if (min(ev) < 1e-3) wbend(RG_input, Wt) else RG_input
+ev <- eigen(RG, symmetric = TRUE, only.values = TRUE)$values
+cat("Smallest eigenvalue after weighted bending:", signif(min(ev), 3), "\n")
+stopifnot(min(ev) > 0)
+chg <- data.table(t1 = rg_src$t1, t2 = rg_src$t2, rg_published = rg_src$rg,
+                  rg_used = round(RG[cbind(rg_src$t1, rg_src$t2)], 3))[, change := rg_used - rg_published]
+kable(chg, caption = "Sourced correlations before and after weighted bending")
+cat("Largest change of a published value:", signif(max(abs(chg$change)), 2), "\n")
+ix <- which(upper.tri(RG_input) & RG_input == 0, arr.ind = TRUE)
+implied <- data.table(t1 = traits[ix[, 1]], t2 = traits[ix[, 2]], implied_rg = round(RG[ix], 3))[order(-abs(implied_rg))]
+kable(implied[abs(implied_rg) >= 0.05], caption = "Unknown pairs: implied values |r| >= 0.05 forced by the published correlations (not estimates)")
+cat(sprintf("Unknown pairs with |implied r| < 0.05: %d\n", implied[abs(implied_rg) < 0.05, .N]))
+
+n_pairs <- choose(length(traits), 2)
+cat(sprintf("Sourced off-diagonal correlations: %d of %d (%.0f%%)\n",
+            nrow(rg_src), n_pairs, 100 * nrow(rg_src) / n_pairs))
+```
+
+**NUE correlations (revised 1 Nov 2026, your choice):** all three NUE correlations now come
+from one study, Tavernier et al. (2024, J Dairy Sci 107:2231-2240), NUEtot (N in milk and meat
+divided by N available), 1,291 grazing Irish cows. They replace Chen et al. (2021) MY-NUE 0.47 and
+the unsourced PY-NUE = 0 and MUN-NUE = 0. Flags: (i) grazing system, not confinement;
+(ii) heritability is still Chen et al. 2021 (0.13; Tavernier NUEtot 0.08), so h2 and r_g come from
+different populations; (iii) Chen et al. 2021 report MY (0.47) as the *highest* NUE correlation across
+30 traits, so in that population PY-NUE is below 0.47. A high PY-NUE means selection on production
+alone already raises NUE.
+
+**Other papers you supplied (1 Nov 2026), read and not used as parameters:**
+
+| Paper | Finding | Why not used |
+|---|---|---|
+| Rzewuska & Strabel 2015, Anim Sci Pap Rep 33:243-256 | Polish HF: MU h2 0.16-0.19; r_g MU-calving to first insemination -0.06 to 0.14 across lactation | Supports keeping MUN-ICF = 0 |
+| Chen et al. 2022, J Dairy Sci 105:7575-7587 | N efficiency index (NEI) r_g with longevity -0.21, fertility -0.24, udder health -0.27 (approximate, from bull EBVs) | NEI contains milk urea yield; it is a different trait from NUE. The paper states predicted NUE-MU r_g is "very low" |
+| Correa-Luna et al. 2021, Sustainability 13:9827 | NZ grazing cows with low MUN breeding values did not excrete less urinary N or have higher NUE | Tested in scenario GS_NUE_noMUN (file 04) |
+| Chegini et al. 2026, Front Genet 17:1815864 | Finnish Red, 791 cows: feed-efficiency h2 0.23-0.30 (SE ~0.20); ssGBLUP forward-validation correlation 0.33-0.53, dispersion 0.45-0.75 | h2 too imprecise; used as a real-data benchmark for file 02 accuracies |
+| Jilek et al. 2006, Czech J Anim Sci 51:510-517 | Herd and test date within herd strongly affect milk urea | Phenotypic; agrees with Buitenhuis & Poulsen's large herd-test-day share |
+| He et al. 2026, J Dairy Sci 109:10771-10781 (3 Nov) | Swiss HOL and Brown Swiss: genomic h2 of milk urea about 0.15-0.20, lowest in early and highest in mid lactation; lactation-stage-specific QTL (DGAT1 early only) | Supports the Danish MUN h2 already used; a lactation-stage model is outside this pipeline |
+| Mangwe et al. 2025, J Dairy Sci 108:579-596 (3 Nov) | Meta-analysis, 32 grazing studies: MUN explained 43.5% of urinary-N variation; among-publication heterogeneity 73% (MUN) and 89% (urinary N) | Phenotypic; gives no genetic MUN-NUE correlation, so MUN-NUE stays at Tavernier et al. 2024 |
+| Burren et al. 2025, J Dairy Sci (ETH e-collection 733581) (3 Nov) | Swiss breeds: urinary N rises 10.4 (HOL) and 9.0 (JER) g/d per mg/dL MUN; breed x MUN and breed x BW interactions needed | Phenotypic; supports reading MUN breed-specifically |
+| Padberg et al. 2026, Ruminants 6:48 (3 Nov) | German Holstein: N efficiency predicted from diet energy, diet CP, milk yield and milk protein (CCC 0.78); with blood traits 0.90 | Phenotype definition for CFIT herds (feed records + milk recording); no genetic parameters |
+
+**Papers read on 4 Nov 2026 for the correlation update** (your 19 PDFs and links plus my search):
+all 36 are listed with DOI, population and contribution in `rg_evidence.xlsx` (sheet *Papers*),
+and the criteria with pass/fail reasons in sheets *Criteria* and *Trait pairs*.
+
+**Papers read on 7 Nov 2026** (your 10 PDFs; trait set changed to Saved Feed without DMI):
+
+| Paper | What it gives | Used |
+|---|---|---|
+| Stephansen et al. 2025, Interbull Bull 61:224-228 (Nordic Saved Feed model) | SF = 0.40 ECM + 4.0 dBW - DMI; h2 DMI 0.22-0.50, ECM 0.47-0.52, BW 0.46-0.61; SF index correlations (2022 bulls): Yield 0.26 / 0.07 / 0.23, Fertility -0.02 / 0.12 / -0.14, Mastitis -0.11 / 0.06 / -0.11, Longevity 0.01 / 0.17 / -0.09 (HOL / RDC / JER) | SF definition; its index correlations are the older of two NAV sets (NAV 2026 note used, recent over old; compared in 00b) |
+| NAV 2026, Economic weight of Saved feed in NTM (supplied 3 Nov) | SF index correlations with NTM sub-indices, Table 4 | **SF-PY, SF-ICF, SF-SCS, SF-LONG** |
+| Lidauer et al. 2023, Animal 17:100917 (supplied 4 Nov) | ReFI h2 0.23 (SE 0.06) | **SF h2** (proxy) |
+| Manzanilla-Pech et al. 2023, J Dairy Sci 106:9006-9015 | DMI h2 0.17-0.25, BW h2 0.45-0.58, DMI-BW r_g 0.58-0.65 (3D cameras, Danish CFIT) | not used: DMI and BW are not model traits |
+| Lassen & Borchersen, Cattle FeedInTake (slides) | 28,400 cows, 39 farms (42 herds) | **population sizes and herds** |
+| Lassen, Thomasen & Borchersen 2023, J Dairy Sci 106:9105-9114 | repeatabilities of 3D-camera DMI and BW | phenotypic; no parameter |
+| Stephansen et al. (Interbull), RFI genomic prediction, Nordic | assumed h2 0.15 and between-country r_g 0.6 (inputs, not estimates) | not used |
+| Thorup et al., J Dairy Res (feed efficiency and behaviour, HOL vs JER) | phenotypic repeatabilities | not used |
+| Atsbeha & Kidane 2025, J Dairy Sci 108:2561-2572 | feed efficiency / surplus feed intake, Norwegian Red (economic model) | not used |
+| Johansen et al. 2024, J Dairy Sci 107:7973-7982 | heifer growth and feed efficiency, RDC / HOL / F1 | not used (heifers) |
+| Body-weight prediction from 3D images, Front Genet 2023 (13:947176) | image methods | not used |
+| Refsgaard Andersen & Foldager 1980, Ann Zootech 29:387-391 | feeding standards, growing cattle | not used |
+
+**Interpretation:** `r nrow(rg_src)` of `r choose(length(traits), 2)` pairs are sourced; the other
+pairs carry the implied values above. Index-level results depend on these, so they are reported as
+consequences of the sourced correlations, not as the true genetic architecture.
+
+# Genotype-by-environment (country) assumption
+
+* **Verified:** the NAV yield model uses *common genetic parameters for all three
+  countries* and only allows environmental (co)variances to differ between Denmark,
+  Sweden and Finland (NAV May 2024, Section 4). NAV therefore assumes a between-country
+  genetic correlation of ~1.
+* **Verified (indirect):** genetic correlations between macro-environments within Sweden
+  were mostly > 0.9 for milk yield (Mulder et al., EAAP 2013, S14_10).
+* **No published DK-SE-FI between-country genetic correlation was found.**
+
+Simulation design, therefore:
+
+```{r gxe}
+gxe_scenarios <- data.table(
+  scenario = c("NAV assumption (no GxE)", "Moderate GxE (sensitivity)"),
+  rg_between_countries = c(1.00, 0.90),
+  status = c("matches NAV model", "scenario anchored on Mulder et al. 2013 (> 0.9 within Sweden)")
+)
+kable(gxe_scenarios)
+```
+
+THI enters the GxE models as a herd-test-day covariate (reaction norm), as agreed.
+THI series for DK/SE/FI are **not yet sourced**; they will come from published
+meteorological records before `03_multitrait_gxe.Rmd` is run.
+
+# Breeding goal: Nordic Total Merit (NTM) weights (added 3 Nov 2026)
+
+The selection indices in file 04 now use the **official NTM sub-index weights** instead of
+illustrative emphases. Sources (PDFs you supplied, 3 Nov 2026):
+
+* **NTM weights per breed:** Nordic Cattle Genetic Evaluation, *Economic weight of Saved feed
+  in NTM* (2026), Table 2, column "New NTM" (introduced in the May 2026 index round).
+* **Milk vs protein inside the Yield sub-index:** Kargo et al. 2014, *J Dairy Sci*
+  97:7879-7888, Tables 13 (RDC) and 14 (Holstein), Nordic economic values (EUR/kg) and genetic
+  SD (kg).
+* **EUR per NTM unit per cow-year:** Fikse & Kargo 2020, *The economic value of NTM*, p. 2
+  (HOL 9.9, RDC 9.2, JER 8.0).
+
+```{r ntm_sources}
+ntm_w <- data.table(   # Saved-feed note, Table 2, "New NTM" columns
+  sub_index = c("Yield", "Growth", "Fertility", "Birth index", "Calving index", "Udder health",
+                "General health", "Claw health", "Frame", "Feet & Legs", "Udder", "Milkability",
+                "Temperament", "Longevity", "Youngstock survival", "Saved Feed"),
+  HOL = c(0.90, 0.08, 0.36, 0.14, 0.14, 0.30, 0.14, 0.10, 0.00, 0.05, 0.18, 0.09, 0.04, 0.06, 0.13, 0.35),
+  RDC = c(1.02, 0.10, 0.36, 0.11, 0.10, 0.26, 0.11, 0.07, 0.00, 0.06, 0.26, 0.11, 0.03, 0.06, 0.19, 0.35),
+  JER = c(0.83, 0.00, 0.26, 0.04, 0.07, 0.44, 0.14, 0.09, 0.00, 0.07, 0.15, 0.09, 0.03, 0.09, 0.10, 0.38))
+ntm_map <- c(Yield = "MY + PY + FY", Fertility = "ICF (shorter = better)", `Udder health` = "SCS (lower = better)",
+             Longevity = "LONG", `Saved Feed` = "SF (Saved Feed, higher = better)")
+ntm_w[, simulated_as := ifelse(sub_index %in% names(ntm_map), ntm_map[sub_index], "not simulated")]
+kable(ntm_w, caption = "NTM sub-index weights (May 2026) and the simulated trait that represents each")
+cat(sprintf("Share of total NTM weight on simulated sub-indices: HOL %.0f%%, RDC %.0f%%, JER %.0f%%\n",
+    100 * ntm_w[simulated_as != "not simulated", sum(HOL)] / ntm_w[, sum(HOL)],
+    100 * ntm_w[simulated_as != "not simulated", sum(RDC)] / ntm_w[, sum(RDC)],
+    100 * ntm_w[simulated_as != "not simulated", sum(JER)] / ntm_w[, sum(JER)]))
+
+kargo <- data.table(   # Kargo et al. 2014, Tables 13-14, Nordic column
+  breed = c("RDC", "HOL"), ev_milk = c(-0.029, -0.030), sd_milk = c(807, 831),
+  ev_prot = c(4.81, 4.60), sd_prot = c(27.1, 25.0), ev_fat = c(1.33, 1.28), sd_fat = c(33.8, 32.7))
+kargo[, `:=`(milk_per_SD = ev_milk * sd_milk, prot_per_SD = ev_prot * sd_prot, fat_per_SD = ev_fat * sd_fat)]
+kable(kargo, digits = 3, caption = "Nordic economic values (EUR/kg) x genetic SD (kg) = EUR per genetic SD (Kargo et al. 2014)")
+eur_per_ntm <- c(HOL = 9.9, RDC = 9.2, JER = 8.0)   # Fikse & Kargo 2020
+```
+
+**How NTM maps onto the `r length(traits)` simulated traits.**
+
+* NTM weights act on sub-indices scaled to **10 index units per genetic SD** of AI bulls in the
+  base (Kargo et al. 2014, p. 7884). File 04 standardises breeding values by the genetic SD at
+  the end of burn-in, so a weight of 0.90 per sub-index SD is used as 0.90 per trait SD.
+  *Assumption:* one sub-index SD equals one genetic SD of the simulated trait that represents it.
+* **Yield** = milk, protein and fat yield (fat added 7 Nov 2026), combined with the per-SD economic
+  values above (milk volume has a negative value), scaled to unit SD using their genetic
+  correlations, then given the Yield weight. *Jersey is not in Kargo et al. 2014; the
+  Holstein milk:protein ratio is used for Jersey (assumption).*
+* **Fertility, udder health, longevity** are each represented by one simulated trait (ICF, SCS,
+  LONG), although the real sub-indices combine several traits. Since 7 Nov 2026 the same holds for
+  **birth index, calving index, general health, claw health, udder conformation and youngstock
+  survival** were considered and all dropped on 7 Nov 2026 (unpublished correlations). Each had been represented by its component with the highest
+  correlation with the NAV index (general health: other metabolic diseases, index correlation
+  0.83 / 0.81 / 0.88, NAV 2020 Table 41), with that component's NAV heritability.
+* **Saved Feed** is simulated as its own trait, SF (7 Nov 2026), so the NTM Saved Feed weight
+  acts on SF directly (higher = more feed saved). The production correction of DMI used until
+  7 Nov (genetic regression on MY and PY) is no longer needed: NAV's Saved Feed is already defined
+  at equal production (0.40 ECM + 4.0 dBW - DMI; Stephansen et al. 2025).
+* The **other sub-indices** (`r ntm_w[simulated_as == "not simulated", .N]` of them) are not
+  simulated. In real NTM they take part of the selection pressure, so absolute responses here
+  are larger than real NTM selection would give. Comparisons between indices are less affected.
+* **NUE, MUN, CH4 and resilience (LNVAR) have no NTM weight.** No economic value for NUE has been
+  published (Chen et al. 2022 built their N index from desired gains, not economic values).
+  NUE is therefore added on top of NTM at two weights you chose: **0.35** (equal to the Saved
+  Feed weight) and **0.75**.
+* **MUN test (your request, 7 Nov 2026):** scenario GS_NTM_NUE35_MUN adds a MUN weight of
+  **-0.35** to GS_NTM_NUE35, to re-test whether a MUN weight helps NUE under the current matrix.
+* **Methane (your request, 7 Nov 2026):** no economic value for methane concentration is published.
+  The CH4 weight is chosen below from a sweep of 0 to -1 at NUE 0.35 and 0.75 (selection-index
+  theory), at the **knee** of the trade-off between methane reduction and NTM lost.
+
+```{r ntm_index}
+build_w <- function(b, nue = 0, mun = 0, ch4 = 0) {
+  k <- if (b == "JER") kargo[breed == "HOL"] else kargo[breed == b]
+  a <- c(MY = k$milk_per_SD, PY = k$prot_per_SD, FY = k$fat_per_SD) / k$prot_per_SD
+  sdY <- sqrt(drop(t(a) %*% RG[names(a), names(a)] %*% a))      # SD of the Yield combination (MY, PY, FY)
+  W <- setNames(ntm_w[[b]], ntm_w$sub_index)
+  w <- setNames(rep(0, length(traits)), traits)
+  w["MY"] <- W["Yield"] * a["MY"] / sdY;  w["PY"] <- W["Yield"] * a["PY"] / sdY;  w["FY"] <- W["Yield"] * a["FY"] / sdY
+  w["ICF"] <- -W["Fertility"];            w["SCS"] <- -W["Udder health"]
+  w["LONG"] <- W["Longevity"];            w["SF"] <- W["Saved Feed"]
+  w["NUE"] <- nue; w["MUN"] <- mun; w["CH4"] <- ch4
+  w
+}
+resp <- function(v) drop(RG %*% v) / sqrt(drop(t(v) %*% RG %*% v))
+```
+
+**Methane weight: sweep and knee.** For NUE weight 0.35 and 0.75, the CH4 weight runs from 0 to
+-1 in steps of 0.05. For each step: methane reduction = CH4 response at weight 0 minus CH4
+response at that weight; NTM lost = % of the NTM value of the same index without a CH4 weight
+(both per unit selection intensity, breeds combined with CFIT cow weights). The **knee** is the step
+furthest from the straight line joining the two ends of this curve (after scaling both axes to
+0-1): before it, methane falls fast for little NTM; after it, each extra unit of methane reduction
+costs more NTM. Of the two NUE levels, the one whose knee buys more methane reduction per % of NTM
+lost is simulated (one methane scenario keeps the 20-replicate run within the time agreed).
+
+```{r ch4_sweep}
+bw <- n_breed / sum(n_breed)
+sweep <- rbindlist(lapply(c(0.35, 0.75), function(nu) rbindlist(lapply(seq(0, 1, by = 0.05), function(cw) {
+  rbindlist(lapply(c("HOL", "RDC", "JER"), function(b) {
+    w0 <- build_w(b); r <- resp(build_w(b, nue = nu, ch4 = -cw)); r0 <- resp(build_w(b, nue = nu))
+    data.table(nue = nu, ch4_weight = -cw, breed = b, CH4 = r["CH4"], CH4_0 = r0["CH4"], NUE = r["NUE"],
+               NTM = 10 * sum(w0 * r), NTM_0 = 10 * sum(w0 * r0))
+  }))
+}))))
+sw <- sweep[, .(CH4 = sum(bw[breed] * CH4), red = sum(bw[breed] * (CH4_0 - CH4)), NUE = sum(bw[breed] * NUE),
+                ntm_lost_pct = sum(bw[breed] * 100 * (1 - NTM / NTM_0))), by = .(nue, ch4_weight)]
+knee <- sw[, {
+  x <- (ntm_lost_pct - min(ntm_lost_pct)) / diff(range(ntm_lost_pct)); y <- (red - min(red)) / diff(range(red))
+  d <- abs((y[.N] - y[1]) * x - (x[.N] - x[1]) * y + x[.N] * y[1] - y[.N] * x[1]) / sqrt((y[.N] - y[1])^2 + (x[.N] - x[1])^2)
+  k <- which.max(d); .(ch4_weight = ch4_weight[k], CH4_resp = CH4[k], reduction = red[k], ntm_lost_pct = ntm_lost_pct[k],
+                       NUE = NUE[k], red_per_pct = red[k] / ntm_lost_pct[k])
+}, by = nue]
+kable(knee, digits = 3, caption = "Knee of the methane trade-off at each NUE weight (cow-weighted, per unit selection intensity)")
+ch4_pick <- knee[which.max(red_per_pct)]
+cat(sprintf("Simulated methane scenario: NUE %.2f with CH4 weight %.2f (methane response %.3f SD per unit i; NTM lost %.1f%%).\n",
+            ch4_pick$nue, ch4_pick$ch4_weight, ch4_pick$CH4_resp, ch4_pick$ntm_lost_pct))
+ggplot2::ggplot(sw, ggplot2::aes(ntm_lost_pct, red, colour = factor(nue))) + ggplot2::geom_path() + ggplot2::geom_point(size = 0.8) +
+  ggplot2::geom_point(data = knee, ggplot2::aes(ntm_lost_pct, reduction), size = 3, shape = 21, fill = "white") + ggplot2::theme_bw() +
+  ggplot2::labs(x = "NTM lost (% of the same index without CH4 weight)", y = "methane reduction (genetic SD per unit i)",
+                colour = "NUE weight", caption = "open circles: knee")
+```
+
+```{r index_weights}
+ch4_name <- sprintf("GS_NTM_NUE%02d_CH4", round(100 * ch4_pick$nue))
+idx_def <- data.table(index = c("GS_NTM", "GS_NTM_NUE35", "GS_NTM_NUE75", "GS_NTM_NUE35_MUN", ch4_name),
+                      nue = c(0, 0.35, 0.75, 0.35, ch4_pick$nue), mun = c(0, 0, 0, -0.35, 0),
+                      ch4 = c(0, 0, 0, 0, ch4_pick$ch4_weight))
+kable(idx_def, caption = "Selection indices on top of NTM (weights per genetic SD)")
+index_weights <- rbindlist(lapply(c("HOL", "RDC", "JER"), function(b) rbindlist(lapply(seq_len(nrow(idx_def)), function(i)
+  data.table(index = idx_def$index[i], breed = b, trait = traits,
+             weight = build_w(b, idx_def$nue[i], idx_def$mun[i], idx_def$ch4[i]))))))
+kable(dcast(index_weights[weight != 0 | trait == "NUE"], trait ~ index + breed, value.var = "weight"), digits = 3,
+      caption = "Index weights per genetic SD used by file 04 (0 for all other traits)")
+```
+
+**Expected trade-off (selection-index theory).** For an index on true breeding values, the
+response of trait *j* per unit of selection intensity is (G w)~j~ / sqrt(w' G w), with G the
+genetic correlation matrix above. The NTM value of a response is 10 x sum of NTM weight x response
+(index units), converted to EUR per cow-year with Fikse & Kargo (2020). This ignores accuracy
+and the non-simulated sub-indices; file 04 gives the simulated values.
+
+```{r ntm_frontier}
+frontier <- rbindlist(lapply(c("HOL", "RDC", "JER"), function(b) {
+  w0 <- build_w(b); V0 <- 10 * sum(w0 * resp(w0))
+  rbindlist(lapply(seq(0, 1, by = 0.05), function(l) {
+    r <- resp(build_w(b, nue = l)); V <- 10 * sum(w0 * r)
+    data.table(breed = b, nue_weight = l, NUE = r["NUE"], MUN = r["MUN"], CH4 = r["CH4"], MY = r["MY"],
+               PY = r["PY"], NTM_units = V, NTM_pct_of_max = 100 * V / V0,
+               EUR_loss_per_cow_yr = (V0 - V) * eur_per_ntm[[b]])
+  }))
+}))
+kable(frontier[nue_weight %in% c(0, 0.35, 0.75)], digits = 3,
+      caption = "Response per unit selection intensity (genetic SD) and NTM value retained, at the three simulated NUE weights")
+ggplot2::ggplot(frontier, ggplot2::aes(NTM_pct_of_max, NUE, colour = breed)) + ggplot2::geom_path() +
+  ggplot2::geom_point(data = frontier[nue_weight %in% c(0, 0.35, 0.75)], size = 2.5) + ggplot2::theme_bw() +
+  ggplot2::labs(x = "NTM response, % of NTM-only index", y = "NUE response (genetic SD per unit i)",
+                caption = "points: NUE weight 0, 0.35, 0.75")
+```
+
+The CH4 column shows that, with the sourced positive correlations between yield and methane
+concentration (Schneider et al. 2025), **NTM selection alone raises methane concentration**;
+NUE weight reduces that rise only slightly. NTM has no methane weight.
+
+# Sensitivity analysis: every NUE correlation scaled (your choice, 7 Nov 2026)
+
+All NUE correlations are uncertain (one grazing Irish study plus implied values; no Nordic estimate
+exists). To show how much the conclusions rest on them, the burn-in and the GS_NTM and
+GS_NTM_NUE35 programmes are also run with **every NUE correlation multiplied by s = 0 and s = 0.5**
+(s = 1 is the main run). With D = diag(1, ..., s, ..., 1) at the NUE position, the scaled matrix is
+R~s~ = D R D + (1 - s^2^) e e', where e is the NUE unit vector. Both terms are positive semi-definite
+and the first is positive definite, so R~s~ is a valid correlation matrix for every s in [0, 1]
+without any further bending, and all non-NUE correlations are unchanged.
+
+```{r nue_sensitivity}
+nue_scale <- function(R, s) {
+  D <- diag(ifelse(rownames(R) == "NUE", s, 1)); Rs <- D %*% R %*% D
+  Rs[cbind(which(rownames(R) == "NUE"), which(rownames(R) == "NUE"))] <- 1
+  dimnames(Rs) <- dimnames(R); Rs
+}
+sens <- rbindlist(lapply(c(0, 0.5, 1), function(sc) {
+  Rs <- nue_scale(RG, sc); stopifnot(min(eigen(Rs, only.values = TRUE)$values) > 0)
+  if (sc < 1) saveRDS(Rs, sprintf("params/RG_matrix_NUEx%s.rds", sub("\\.", "", format(sc))))
+  rbindlist(lapply(c("HOL", "RDC", "JER"), function(b) {
+    w0 <- build_w(b); w35 <- build_w(b, nue = 0.35)
+    r0 <- drop(Rs %*% w0) / sqrt(drop(t(w0) %*% Rs %*% w0)); r35 <- drop(Rs %*% w35) / sqrt(drop(t(w35) %*% Rs %*% w35))
+    data.table(nue_scale = sc, breed = b, NUE_GS_NTM = r0["NUE"], NUE_GS_NTM_NUE35 = r35["NUE"],
+               NTM_kept_pct = 100 * sum(w0 * r35) / sum(w0 * r0))
+  }))
+}))
+kable(sens, digits = 3, caption = "Selection-index theory under the three NUE scalings (response per unit i, genetic SD)")
+fwrite(sens, "params/nue_sensitivity_theory.csv")
+```
+
+**Saved Feed heritability sensitivity (your choice, 7 Nov 2026).** Lidauer et al. (NAV workshop,
+Copenhagen, 20 Jan 2026; Finnish Nordic Red, 537 primiparous cows) estimated h^2^ = 0.08 for the NAV
+Saved Feed index itself, against 0.23 for ReFI used in the main run. The main run keeps 0.23; a
+sensitivity set with SF h^2^ = 0.08 in all breeds (everything else unchanged) is written for file 01.
+
+```{r sf_h2_sensitivity}
+h2_sf <- copy(h2)[code == "SF", `:=`(HOL = 0.08, RDC = 0.08, JER = 0.08, range_low = NA_real_, range_high = NA_real_,
+  status = "SENSITIVITY (NAV Saved Feed index h2; Finnish Nordic Red, 537 cows; no SE given)",
+  source = "Lidauer et al., NAV workshop Copenhagen 20 Jan 2026 (slides)")]
+fwrite(h2_sf, "params/h2_SFh008.csv")
+```
+
+# Save parameters for downstream files
+
+```{r save}
+dir.create("params", showWarnings = FALSE)
+fwrite(index_weights, "params/index_weights.csv")
+fwrite(ntm_w, "params/ntm_weights_source.csv")
+fwrite(frontier, "params/ntm_nue_frontier.csv")
+fwrite(sw, "params/ch4_weight_sweep.csv"); fwrite(idx_def, "params/index_definitions.csv")
+fwrite(h2, "params/h2.csv")
+fwrite(rg_src, "params/rg_sourced.csv")
+saveRDS(RG, "params/RG_matrix.rds")
+fwrite(split, "params/breed_country_split.csv")
+fwrite(farms, "params/herds.csv")
+fwrite(gxe_scenarios, "params/gxe_scenarios.csv")
+list.files("params")
+```
+
+# Open items blocking full verification
+
+| Item | Needed from | Effect if unresolved |
+|---|---|---|
+| ~~Danish 3-breed milk urea paper (PMID 37331871)~~ | resolved 1 Nov 2026 | MUN now Danish, breed-specific |
+| ~~MUN meta-analysis 2025~~ | resolved 3 Nov 2026 (Mangwe et al. 2025) | Phenotypic only; MUN-NUE stays at Tavernier et al. 2024 (-0.12, SE 0.17) |
+| ~~NTM economic weights~~ | resolved 3 Nov 2026 | NTM May 2026 weights used (section above) |
+| Jersey economic values for milk and protein (NTM 2018 report) | NAV | Holstein ratio used for Jersey |
+| ~~Per-country cow numbers for CFIT~~ | resolved 7 Nov 2026 (CFIT slide + your allocation rule) | only 3 breed x country groups are known; the rest is split equally |
+| ~~Further Nordic genetic correlations~~ | partly resolved: `r nrow(rg_src)` of `r choose(length(traits), 2)` pairs sourced (7 Nov 2026; `rg_evidence.xlsx` documents the 4 Nov set) | remaining pairs take implied values from weighted bending |
+| Saved Feed: heritability of the NAV index itself, and its correlations with MY, LNVAR, MUN, NUE, CH4 | NAV / literature | ReFI h2 (Nordic Red) used; other SF pairs implied by weighted bending |
+| Genetic variances (kg) of ECM and body-weight change, to evaluate the NAV Saved Feed formula directly | NAV / literature | SF entered with its own published values instead (your choice, 7 Nov 2026) |
+| THI series for DK/SE/FI | meteorological sources | GxE reaction norm not run |
+
+```{r session}
+sessionInfo()
+```

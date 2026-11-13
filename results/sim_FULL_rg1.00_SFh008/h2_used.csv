@@ -1,0 +1,12 @@
+trait,code,HOL,RDC,JER,range_low,range_high,status,population,source
+"305-d milk yield, 1st lactation",MY,0.43,0.39,0.44,,,VERIFIED,NAV joint DK-SE-FI evaluation,"NAV routine genetic evaluation, May 2024, Tables 4.1-4.3"
+"305-d protein yield, 1st lactation (substitute for protein %)",PY,0.35,0.33,0.38,,,VERIFIED,NAV joint DK-SE-FI evaluation,"NAV routine genetic evaluation, May 2024, Tables 4.1-4.3"
+Saved Feed (feed efficiency; NAV index = 0.40 ECM + 4.0 dBW - DMI),SF,0.08,0.08,0.08,,,"SENSITIVITY (NAV Saved Feed index h2; Finnish Nordic Red, 537 cows; no SE given)","Finnish Nordic Red, 654 primiparous cows","Lidauer et al., NAV workshop Copenhagen 20 Jan 2026 (slides)"
+"Somatic cell count, test-day",SCS,0.095,0.115,0.095,0.06,0.14,VERIFIED (midpoint),Nordic HOL/RDC (SE) and JER (DK),"Vargas Jurado et al. 2026, J Dairy Sci 109:6387-6400; NAV May 2024 Sec. 8 (0.08-0.15)"
+Resilience: log-variance of daily milk deviations,LNVAR,0.22,0.22,0.22,0.2,0.24,VERIFIED-EU (midpoint),"Dutch AMS herds, 198,754 1st-parity cows","Poppe, Mulder & Veerkamp, ADSA 2019 abstract #286"
+"Interval calving-first insemination, 1st lact.",ICF,0.05,0.04,0.04,,,VERIFIED,NAV joint DK-SE-FI evaluation,"NAV routine genetic evaluation, May 2024, Table 6.x"
+Longevity (NAV longevity model),LONG,0.056,0.056,0.056,0.022,0.09,"VERIFIED (midpoint, via review)",Danish dairy cattle,"Clasen et al. 2017 as tabulated in Hu et al. 2021, Front Genet 12:695543"
+"Milk urea (test-day MU, mmol/L)",MUN,0.22,0.24,0.18,,,VERIFIED,"Danish Holstein 323,800 / Jersey 70,634 / Red 27,870 cows, routine recording 2019-2020","Buitenhuis & Poulsen 2023, J Dairy Sci 106:5562-5569, Table 2 (SE 0.004 / 0.01 / 0.01)"
+Predicted nitrogen use efficiency,NUE,0.13,0.13,0.13,0.12,0.14,VERIFIED-EU (midpoint),"Holstein, 154 farms in 5 European countries","Chen et al. 2021, J Dairy Sci 104:4413-4423"
+"Enteric methane concentration in breath (CH4_C, daily, sniffer)",CH4,0.175,0.175,0.175,0.16,0.19,"VERIFIED-DK, Holstein only (midpoint of parity groups)","Danish Holstein, 4,019 cows, 9 commercial farms, 587,640 daily records","Schneider et al. 2025, J Dairy Sci 108:12519-12530, Table 2 (PP 0.19 SE 0.03; MLP 0.16 SE 0.02)"
+"305-d fat yield, 1st lactation (completes the NTM Yield sub-index; added 7 Nov 2026)",FY,0.36,0.34,0.35,,,VERIFIED,NAV joint DK-SE-FI evaluation,"NAV routine genetic evaluation, May 2024, Tables 4.1-4.3"

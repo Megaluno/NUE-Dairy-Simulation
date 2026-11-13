@@ -1,0 +1,653 @@
+---
+title: "02 - Dosage matrix, G/A/H kernels, and cross-validated genomic prediction"
+subtitle: "ABLUP-REML, GBLUP, ssGBLUP, weighted ssGBLUP, rrBLUP, BayesA, BayesB"
+author: "Prepared for Emmanuel Ismaila"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    code_folding: show
+params:
+  sim_dir: "sim_TEST_rg1.00"     # output folder of 01_founders_burnin.Rmd
+  n_geno_per_gen: 300            # genotyped cows per generation (gen 8, 9, 10); FULL default 1000
+  n_nongeno: 600                 # phenotyped, NOT genotyped cows (gen 8-9) for single-step; FULL 3000
+  ped_depth: 4                   # generations of ancestors kept in the pedigree
+  focus_traits: ["NUE", "MUN", "SF"]     # SF (Saved Feed) replaced DMI on 7 Nov 2026
+  n_folds: 5
+  bayes_iter: 6000
+  bayes_burn: 1000
+  run_vc: true                   # all-trait variance-component check; only needed once per dataset
+  seed: 20261101
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+suppressPackageStartupMessages({
+  library(AlphaSimR); library(data.table); library(Matrix); library(nadiv)
+  library(sommer); library(rrBLUP); library(BGLR); library(ggplot2); library(knitr)
+})
+set.seed(params$seed)
+t0 <- Sys.time()
+
+# progress log (knitr discards message() output when message = FALSE)
+progress <- function(...) cat(format(Sys.time(), "%H:%M:%S"), ..., "\n",
+                              file = file.path(params$sim_dir, "progress.log"), append = TRUE)
+```
+
+# Overview
+
+Input: the populations simulated in `01_founders_burnin.Rmd` (folder ``r params$sim_dir``).
+Everything here is computed from that simulation; nothing is typed in by hand.
+
+| Model | Relationship / prior | Predicts EBV from | Variance components |
+|---|---|---|---|
+| ABLUP | pedigree A^-1^ (nadiv, with inbreeding) | pedigree | REML (sommer) |
+| GBLUP | VanRaden G | genomic relationships, then back-solved **SNP effects** | REML (sommer) |
+| ssGBLUP | H^-1^ = A^-1^ + [0, 0; 0, G~b~^-1^ - A~22~^-1^] | pedigree + genotypes | REML (sommer) |
+| ssGBLUP_MF | H^-1^ with breed metafounders: (A^Γ^)^-1^ + [0, 0; 0, G~05b~^-1^ - (A^Γ^~22~)^-1^] | pedigree + genotypes | REML (sommer) |
+| wssGBLUP | H^-1^ with SNP-weighted G (Wang et al. 2012) | as ssGBLUP | REML (sommer) |
+| rrBLUP | ridge on SNP | **SNP effects** | REML (rrBLUP::mixed.solve) |
+| BayesA | scaled-t SNP effects | **SNP effects** | MCMC (BGLR) |
+| BayesB | point-mass + scaled-t | **SNP effects** | MCMC (BGLR) |
+
+Fixed effects in every model: **breed** (factor) + **herd x generation** (block; herd effects
+were redrawn every generation in file 01, and herds are nested in country). Since 7 Nov 2026 the
+herds are single-breed (CFIT farms, file 00), so herd x generation also identifies the breed; the
+breed term is then dropped as redundant (same fit, full-rank design).
+
+# Load simulation output
+
+```{r load}
+st   <- readRDS(file.path(params$sim_dir, "burnin_state.rds"))
+SP   <- st$SP                               # needed by AlphaSimR accessors
+phen <- fread(file.path(params$sim_dir, "phenotypes.csv"))
+ped  <- fread(file.path(params$sim_dir, "pedigree.csv"))
+traits <- st$traits
+h2_par <- fread("params/h2.csv")
+gens <- sort(unique(as.integer(sub(" .*", "", names(st$kept_cows)))))
+cat("Generations with saved genomes:", gens, "\n")
+```
+
+# Sampling design (subsample for the G-based models)
+
+Stratified by **breed x country** within each generation, proportional to the number of cows.
+
+```{r sample}
+strat_sample <- function(dt, n) {
+  dt[, k := pmax(1, round(n * .N / nrow(dt))), by = .(breed, country)]
+  out <- dt[, .SD[sample(.N, min(.N, k[1]))], by = .(breed, country)]
+  out[, k := NULL]; out
+}
+cand <- phen[generation %in% gens]
+geno_ids <- rbindlist(lapply(gens, function(g)
+  strat_sample(copy(cand[generation == g]), params$n_geno_per_gen)))$id
+ng_pool  <- cand[generation %in% head(gens, -1) & !(id %in% geno_ids)]
+nongeno_ids <- strat_sample(copy(ng_pool), params$n_nongeno)$id
+
+dat <- phen[id %in% c(geno_ids, nongeno_ids)]
+dat[, genotyped := id %in% geno_ids]
+dat[, hg := factor(paste(herd, generation, sep = "_g"))]
+dat[, breed := factor(breed)]
+dat[, .N, by = .(generation, genotyped)][order(generation, -genotyped)]
+dcast(dat[genotyped == TRUE], breed ~ country, fun.aggregate = length, value.var = "id")
+```
+
+# Dosage matrix and its transformations
+
+AlphaSimR returns SNP genotypes as **allele dosages** (count of allele "1": 0, 1, 2).
+Three codings are used below, and they are algebraically equivalent for prediction:
+
+* `M`: dosage 0/1/2.
+* `W = M - 1`: -1/0/1 coding (as in `rrBLUP::A.mat`).
+* `Z = M - 2p`: centred by allele frequency (VanRaden 2008, method 1).
+
+```{r dosage}
+# 8 Nov 2026 (memory, 7 GB machine): subset every saved generation to the sampled cows BEFORE merging,
+# and drop the last-generation population that this file does not use. Same cows, same order as before.
+st$pop <- NULL
+gid <- as.character(geno_ids)
+all_cows <- do.call(c, unname(lapply(st$kept_cows, function(p) p[p@id %in% gid])))
+st$kept_cows <- NULL; invisible(gc())
+gpop <- all_cows[match(gid, all_cows@id)]
+rm(all_cows); invisible(gc())
+M <- pullSnpGeno(gpop, simParam = SP)
+rownames(M) <- gpop@id
+progress("dosage matrix ready"); cat("Dosage matrix:", nrow(M), "cows x", ncol(M), "SNP; values:",
+    paste(sort(unique(as.vector(M))), collapse = ","), "\n")
+
+p   <- colMeans(M) / 2
+maf <- pmin(p, 1 - p)
+keep <- maf >= 0.01                                    # QC: MAF >= 1%
+cat("SNP removed for MAF < 0.01:", sum(!keep), "\n")
+M <- M[, keep]; p <- p[keep]
+W <- M - 1
+Z <- sweep(M, 2, 2 * p)
+stopifnot(max(abs(colMeans(Z))) < 1e-10)              # centring check
+```
+
+## Genomic relationship matrix G (VanRaden method 1)
+
+$$G = \frac{ZZ'}{2\sum_j p_j(1-p_j)}$$
+
+```{r Gmat}
+k2pq <- 2 * sum(p * (1 - p))
+G <- tcrossprod(Z) / k2pq
+dimnames(G) <- list(rownames(M), rownames(M))
+data.table(mean_diag = mean(diag(G)), mean_offdiag = mean(G[upper.tri(G)]),
+           sd_diag = sd(diag(G)))
+# Cross-check with rrBLUP::A.mat on the -1/0/1 coding (same estimator)
+G_rr <- rrBLUP::A.mat(W, min.MAF = 0.01)
+cat("max |G - rrBLUP::A.mat| =", signif(max(abs(G - G_rr)), 3), "\n")
+```
+
+Centring by the sample's own allele frequencies makes **G singular** (rows of Z sum to zero).
+For GBLUP, G is regularised as 0.99 G + 0.01 I (a modelling choice, flagged).
+
+## Pedigree relationship matrix A^-1^ (with inbreeding)
+
+The pedigree is traced `r params$ped_depth` generations back from the analysed cows.
+Older ancestors are treated as unrelated base animals.
+
+```{r Ainv}
+ped[, `:=`(sire = ifelse(sire %in% id, sire, NA), dam = ifelse(dam %in% id, dam, NA))]
+trace_ped <- function(ids, depth) {
+  keep <- ids; cur <- ids
+  for (d in seq_len(depth)) {
+    par <- unique(na.omit(c(ped[id %in% cur, sire], ped[id %in% cur, dam])))
+    cur <- setdiff(par, keep); keep <- c(keep, cur)
+    if (!length(cur)) break
+  }
+  keep
+}
+ped_ids <- trace_ped(dat$id, params$ped_depth)
+P <- unique(ped[id %in% ped_ids, .(id, dam, sire)])
+P[!(dam %in% id), dam := NA]; P[!(sire %in% id), sire := NA]
+P <- as.data.frame(lapply(P, as.character))
+Pp <- prepPed(P)                                      # orders parents before offspring
+Ai <- makeAinv(Pp)
+Ainv <- Ai$Ainv; dimnames(Ainv) <- list(Pp[, 1], Pp[, 1])
+F_inb <- setNames(Ai$f, Pp[, 1])
+cat("Pedigree animals:", nrow(Pp), "| mean F of analysed cows:",
+    round(mean(F_inb[as.character(dat$id)]), 4), "\n")
+progress("Ainv built: ", format(Sys.time() - t0))
+```
+
+## A~22~, G~22~ compatibility and H^-1^
+
+A~22~^-1^ is obtained without forming A, using the partition of A^-1^
+(1 = non-genotyped, 2 = genotyped): A~22~^-1^ = A^22^ - A^21^ (A^11^)^-1^ A^12^.
+
+G is rescaled to the A~22~ base (G\* = a + bG, matching the mean diagonal and mean of A~22~;
+Christensen et al. 2012, *Animal*) and blended G~b~ = 0.95 G\* + 0.05 A~22~
+(the 0.95/0.05 weighting is a common choice, flagged).
+
+```{r Hinv}
+gid <- rownames(G); oid <- setdiff(rownames(Ainv), gid)
+A11 <- Ainv[oid, oid]; A12 <- Ainv[oid, gid]; A22u <- Ainv[gid, gid]
+# sparse Cholesky of A11 with a DENSE right-hand side (a sparse RHS causes heavy fill-in)
+L11 <- Cholesky(forceSymmetric(A11), LDL = FALSE)
+A22inv <- as.matrix(A22u) - crossprod(as.matrix(A12), as.matrix(solve(L11, as.matrix(A12))))
+progress("A22^-1 built: ", format(Sys.time() - t0))
+rm(A11, A12, A22u, L11); invisible(gc())
+A22 <- solve(A22inv); dimnames(A22) <- list(gid, gid)
+
+tune_G <- function(Gm) {
+  b <- (mean(diag(A22)) - mean(A22)) / (mean(diag(Gm)) - mean(Gm))
+  a <- mean(A22) - b * mean(Gm)
+  a + b * Gm
+}
+make_Hinv <- function(Gm) {
+  Gb  <- 0.95 * tune_G(Gm) + 0.05 * A22
+  # H^-1 = A^-1 + [0, 0; 0, Gb^-1 - A22^-1], built as ONE sparse addition
+  # (block assignment Hi[gid, gid] <- ... into a sparse matrix is extremely slow)
+  D   <- solve(Gb) - A22inv
+  idx <- match(gid, rownames(Ainv)); ng <- length(idx)
+  Dsp <- sparseMatrix(i = rep(idx, times = ng), j = rep(idx, each = ng), x = as.vector(D),
+                      dims = dim(Ainv), dimnames = dimnames(Ainv))
+  forceSymmetric(Ainv + Dsp)
+}
+Hinv <- make_Hinv(G)
+cat("H^-1 dimension:", nrow(Hinv), "| cor(offdiag G, offdiag A22):",
+    round(cor(G[upper.tri(G)], A22[upper.tri(A22)]), 3), "\n")
+progress("Hinv built: ", format(Sys.time() - t0))
+```
+
+**Correction to the record (7 Nov 2026).** An earlier text said that no adjustment of G to A~22~ was
+tested. That was wrong: the `tune_G()` step above has always rescaled G as a + bG to the mean
+diagonal and mean of A~22~ (Christensen et al. 2012, *Animal* 6:1565; same idea as Vitezica et al.
+2011, *Genet Res* 93:357). It does this **once for all three breeds pooled**. What had not been
+tested is a model that handles the three breeds as separate base populations. That is what the
+metafounder model below adds.
+
+## Metafounder single-step (ssGBLUP_MF)
+
+**Why this second model.** Pedigree relationships assume that all base animals are unrelated and come
+from one population. Genomic relationships (VanRaden G) are centred on the allele frequencies of the
+genotyped cows, which mix three breeds. The pooled a + bG rescaling fixes the overall mean and
+diagonal, but it cannot make the between-breed blocks of G and A~22~ agree at the same time as the
+within-breed blocks. Metafounders (Legarra et al. 2015, *Genetics* 200:455; Garcia-Baccino et al.
+2017, *Genet Sel Evol* 49:34) solve this by giving each breed its own "base animal" (one metafounder
+per breed), with relationships among the metafounders in a matrix **Γ**. Then:
+
+* the pedigree matrix becomes A^Γ, in which base animals of breed i are related to each other by
+  γ~ii~ and to base animals of breed j by γ~ij~;
+* G is computed with allele frequency 0.5 for every SNP, G~05~ = (M - 1)(M - 1)' / (m/2), so it needs
+  no centring and no rescaling: G~05~ and A^Γ~22~ are on the same scale by construction.
+
+**Γ from base allele frequencies** (Legarra et al. 2015, eq. for multiple metafounders):
+γ~ij~ = (8/m) Σ~k~ (p~ik~ - 0.5)(p~jk~ - 0.5), with p~ik~ the frequency of SNP k in the base
+population of breed i. The base population of a breed is the generation before its base animals in
+the truncated pedigree (file 01 saved the cow allele frequencies of every generation). **Flag:** in this
+simulation the base frequencies are known exactly; with real data they must be estimated
+(e.g. Garcia-Baccino et al. 2017), so the MF result here is a best case for that model.
+
+**A^Γ inverse.** Each animal i with parents s and d (a metafounder replaces an unknown parent of the
+same breed) has Mendelian-sampling variance D~i~ = 1 - (a~ss~ + a~dd~)/4, where a metafounder has
+a~mm~ = γ~mm~. Then (A^Γ)^-1^ = T' blockdiag(Γ^-1^, D^-1^) T, with T = I - P (P holds 0.5 for each
+parent). The diagonal a~ii~ is computed from the rows of the Cholesky-type factor
+L, row~i~ = (row~s~ + row~d~)/2 + sqrt(D~i~) e~i~ (Henderson 1976 recursion, with Γ in place of I for
+the base).
+
+```{r Hinv_MF}
+snpf <- fread(file.path(params$sim_dir, "snp_freq_by_generation.csv"))
+pinfo <- ped[match(Pp[, 1], as.character(id)), .(id = as.character(id), breed, generation)]
+stopifnot(!anyNA(pinfo$breed))
+mf_names <- paste0("MF_", levels(dat$breed))
+# base generation(s): one slot per missing parent, frequency of the generation before the animal
+miss <- data.table(breed = pinfo$breed, g = pmax(pinfo$generation - 1L, 0L),
+                   n = is.na(Pp[, 2]) + is.na(Pp[, 3]))[n > 0, .(n = sum(n)), by = .(breed, g)]
+snp_keep <- which(keep)                                 # same MAF subset as G
+p_base <- sapply(levels(dat$breed), function(b) {
+  w <- miss[breed == b]
+  f <- snpf[breed == b & generation %in% w$g & snp %in% snp_keep]
+  f <- merge(f, w[, .(generation = g, n)], by = "generation")
+  f[, .(p = sum(p * n) / sum(n)), by = snp][order(snp)]$p
+})
+m_snp <- nrow(p_base)
+Gam <- 8 * crossprod(p_base - 0.5) / m_snp
+dimnames(Gam) <- list(mf_names, mf_names)
+kable(Gam, digits = 3, caption = "Gamma: relationships among the breed metafounders")
+kable(miss[order(breed, g)], caption = "Base generation(s) used per breed (n = missing-parent slots)")
+
+# augmented pedigree: metafounders first, then animals (Pp order)
+nm  <- length(mf_names); na_ <- nrow(Pp)
+all_id <- c(mf_names, Pp[, 1]); pos <- setNames(seq_along(all_id), all_id)
+mf_of <- pos[paste0("MF_", pinfo$breed)]
+s_i <- ifelse(is.na(Pp[, 3]), mf_of, pos[Pp[, 3]])     # prepPed columns: id, dam, sire
+d_i <- ifelse(is.na(Pp[, 2]), mf_of, pos[Pp[, 2]])
+stopifnot(all(s_i < nm + seq_len(na_)), all(d_i < nm + seq_len(na_)))   # parents before offspring
+
+# rows of the factor L (A = L L'), stored sparsely as named vectors
+Lc <- t(chol(Gam))
+rows <- vector("list", nm + na_); aii <- numeric(nm + na_); Dv <- numeric(na_)
+for (k in seq_len(nm)) { rows[[k]] <- setNames(Lc[k, seq_len(k)], seq_len(k)); aii[k] <- Gam[k, k] }
+for (i in seq_len(na_)) {
+  k <- nm + i; s <- s_i[i]; d <- d_i[i]
+  Dv[i] <- 1 - (aii[s] + aii[d]) / 4
+  v <- c(rows[[s]] / 2, rows[[d]] / 2)
+  v <- tapply(v, names(v), sum)
+  r <- c(v, setNames(sqrt(Dv[i]), k))
+  rows[[k]] <- r; aii[k] <- sum(r^2)
+}
+stopifnot(all(Dv > 0))
+Tm <- sparseMatrix(i = c(seq_len(nm + na_), nm + seq_len(na_), nm + seq_len(na_)),
+                   j = c(seq_len(nm + na_), s_i, d_i),
+                   x = c(rep(1, nm + na_), rep(-0.5, 2 * na_)), dims = c(nm + na_, nm + na_))
+Lam <- bdiag(solve(Gam), Diagonal(x = 1 / Dv))
+AinvG <- forceSymmetric(crossprod(Tm, Lam %*% Tm)); dimnames(AinvG) <- list(all_id, all_id)
+
+# check: A^Gamma column from L times A^Gamma inverse must give a unit vector
+Lsp <- sparseMatrix(i = rep(seq_along(rows), lengths(rows)),
+                    j = as.integer(unlist(lapply(rows, names))), x = unlist(rows),
+                    dims = c(nm + na_, nm + na_))
+chk_j <- sample(nm + seq_len(na_), 5)
+Acol <- Lsp %*% t(Lsp[chk_j, , drop = FALSE])
+cat("max |A^G^-1 A^G - I| on 5 test columns:",
+    signif(max(abs(as.matrix(AinvG %*% Acol) - diag(1, nm + na_)[, chk_j])), 3), "\n")
+F_mf <- setNames(aii[nm + seq_len(na_)] - 1, Pp[, 1])
+cat("Mean F of analysed cows: pedigree", round(mean(F_inb[as.character(dat$id)]), 4),
+    "| with metafounders", round(mean(F_mf[as.character(dat$id)]), 4), "\n")
+
+# G with allele frequency 0.5 (no centring, no rescaling)
+Mk  <- M - 1
+G05 <- tcrossprod(Mk) / (ncol(Mk) / 2); dimnames(G05) <- dimnames(G)
+stopifnot(ncol(Mk) == m_snp)
+
+# A22^Gamma inverse by partition (block 1 = metafounders + non-genotyped animals)
+oidG <- setdiff(all_id, gid)
+L11g <- Cholesky(forceSymmetric(AinvG[oidG, oidG]), LDL = FALSE)
+A12g <- as.matrix(AinvG[oidG, gid])
+A22Ginv <- as.matrix(AinvG[gid, gid]) - crossprod(A12g, as.matrix(solve(L11g, A12g)))
+A22G <- solve(A22Ginv); dimnames(A22G) <- list(gid, gid)
+rm(L11g, A12g); invisible(gc())
+
+make_Hinv_MF <- function(Gm) {
+  D   <- solve(0.95 * Gm + 0.05 * A22G) - A22Ginv
+  idx <- match(gid, rownames(AinvG)); ng <- length(idx)
+  Dsp <- sparseMatrix(i = rep(idx, times = ng), j = rep(idx, each = ng), x = as.vector(D),
+                      dims = dim(AinvG), dimnames = dimnames(AinvG))
+  forceSymmetric(AinvG + Dsp)
+}
+Hinv_MF <- make_Hinv_MF(G05)
+
+# compatibility of G and A22 by breed block: pooled-tuned G vs A22, and G05 vs A22^Gamma
+gbr <- as.character(dat[match(gid, as.character(id)), breed])
+blk <- function(X, Y) rbindlist(lapply(levels(dat$breed), function(b1) rbindlist(lapply(levels(dat$breed), function(b2) {
+  i <- gbr == b1; j <- gbr == b2
+  x <- X[i, j]; y <- Y[i, j]
+  if (b1 == b2) { x <- x[upper.tri(x)]; y <- y[upper.tri(y)] }
+  data.table(block = paste(b1, b2, sep = "-"), mean_G = mean(x), mean_A22 = mean(y))
+}))))[!duplicated(sapply(strsplit(block, "-"), function(z) paste(sort(z), collapse = "-")))]
+comp <- merge(blk(tune_G(G), A22)[, .(block, pooled_G = mean_G, pooled_A22 = mean_A22)],
+              blk(G05, A22G)[, .(block, MF_G05 = mean_G, MF_A22G = mean_A22)], by = "block")
+comp[, `:=`(gap_pooled = pooled_G - pooled_A22, gap_MF = MF_G05 - MF_A22G)]
+kable(comp, digits = 3, caption = "Mean off-diagonal relationship by breed block: G vs A22 (a smaller gap = more compatible)")
+fwrite(comp, file.path(params$sim_dir, "G_A22_compatibility.csv"))
+progress("Hinv_MF built: ", format(Sys.time() - t0))
+```
+
+# Model functions
+
+All sommer models use the same call; only the relationship inverse changes.
+
+```{r fit_fns}
+# breed + herd x generation, or herd x generation alone when every herd-generation holds one breed
+# (single-breed herds: breed is then a linear combination of the hg columns)
+fixed_formula <- function(d) if (all(d[, uniqueN(breed), by = hg]$V1 == 1)) y ~ hg else y ~ breed + hg
+
+as_gu <- function(Ki) { Ki <- as(Ki, "CsparseMatrix"); attr(Ki, "inverse") <- TRUE; Ki }
+
+fit_sommer <- function(d, Kinv, trait) {
+  ids <- rownames(Kinv)
+  d <- copy(d)[id %in% ids]
+  d[, idf := factor(as.character(id), levels = ids)]
+  d[, y := get(trait)]
+  fit <- mmes(fixed_formula(d), random = ~vsm(ism(idf), Gu = as_gu(Kinv)),
+              rcov = ~units, data = as.data.frame(d),
+              control = mmes_control(diagnostics = list(verbose = FALSE)))
+  th <- unlist(fit$theta)
+  # sommer appends levels without records ("additional Gu levels") to the END of u,
+  # so u is NOT in rownames(Kinv) order: always index by sommer's own row names
+  u <- as.matrix(fit$u); stopifnot(!is.null(rownames(u)), setequal(rownames(u), ids))
+  list(ebv = setNames(u[, 1], rownames(u))[ids], varA = th[1], varE = th[2])
+}
+
+Gi_reg <- solve(0.99 * G + 0.01 * diag(nrow(G)))
+dimnames(Gi_reg) <- dimnames(G)
+
+# SNP effects back-solved from GBLUP: u_snp = Z' G^-1 a / (2 sum pq)
+snp_from_gblup <- function(a_hat, Gm_inv) as.vector(crossprod(Z, Gm_inv %*% a_hat)) / k2pq
+
+# Full-rank fixed-effect design: drop unused levels, then QR-pivot out dependent columns
+fullrank_X <- function(d) {
+  X <- model.matrix(~ breed + hg, data = droplevels(as.data.frame(d)))
+  q <- qr(X); X[, q$pivot[seq_len(q$rank)], drop = FALSE]
+}
+Xfix <- function(d) { X <- fullrank_X(d); X[, colnames(X) != "(Intercept)", drop = FALSE] }
+
+fit_rrblup <- function(dtr, trait) {
+  ms <- mixed.solve(dtr[[trait]], Z = W[as.character(dtr$id), ],
+                    X = fullrank_X(dtr))
+  list(u = ms$u, varA = ms$Vu * k2pq, varE = ms$Ve)   # var_a = Vu * sum(2pq)
+}
+
+fit_bglr <- function(dtr, trait, model) {
+  tmp <- tempfile("bglr_"); dir.create(tmp)
+  fm <- BGLR(y = dtr[[trait]],
+             ETA = list(list(X = Xfix(dtr), model = "FIXED"),
+                        list(X = W[as.character(dtr$id), ], model = model)),
+             nIter = params$bayes_iter, burnIn = params$bayes_burn,
+             saveAt = paste0(tmp, "/"), verbose = FALSE)
+  list(u = fm$ETA[[2]]$b, varE = fm$varE)
+}
+```
+
+# Variance components and heritability recovery (all 10 traits, GBLUP)
+
+Simulated "true" h^2^ for the analysed cows = var(TBV) / var(phenotype within herd-generation),
+compared with the GBLUP-REML estimate. This is the parametric check that the models recover
+the simulated genetic variance.
+
+```{r vc_all}
+h2_mix <- sapply(traits, function(tr) {
+  w <- dat[genotyped == TRUE, .N, by = breed]
+  sum(w$N * unlist(h2_par[code == tr, as.character(w$breed), with = FALSE])) / sum(w$N)
+})
+progress("variance components start")
+gd <- dat[genotyped == TRUE]
+# reference: true h2 WITHIN breed x generation, because breed and herd x generation are
+# fitted as fixed effects and absorb between-breed / between-generation genetic differences
+true_h2 <- function(dd, tr) {
+  t <- dd[[paste0("TBV_", tr)]]; y <- dd[[tr]]
+  yc <- y - ave(y, dd$herd, dd$generation)
+  var(t - ave(t, dd$breed, dd$generation)) / var(yc - ave(yc, dd$breed, dd$generation))
+}
+vc <- if (!isTRUE(params$run_vc)) data.table() else rbindlist(lapply(traits, function(tr) {
+  fg <- fit_sommer(gd, Gi_reg, tr)                 # genomic REML (genotyped cows)
+  fa <- fit_sommer(dat, Ainv, tr)                  # pedigree REML (all phenotyped cows)
+  progress("VC ", tr, " done ", format(Sys.time() - t0))
+  data.table(trait = tr,
+             h2_GBLUP_REML = fg$varA / (fg$varA + fg$varE),
+             h2_ABLUP_REML = fa$varA / (fa$varA + fa$varE),
+             h2_true_genotyped = true_h2(gd, tr),
+             h2_true_all = true_h2(dat, tr),
+             h2_assumed_file00 = h2_mix[[tr]])
+}))
+kable(vc, digits = 3)
+```
+
+**Diagnostic for under-estimation.** If h^2^ from GBLUP is below the true value while ABLUP is
+close to it, the gap is variance not captured by the SNP panel (genomic heritability is
+expected to be lower than h^2^ when markers do not fully tag QTL; de los Campos et al. 2015,
+*PLoS Genet* 11:e1005048). If **both** are low, the likely cause is selection in earlier
+generations on records not included in this analysis, which biases REML downward (REML is
+unbiased under selection only when the data used for selection are in the analysis).
+
+# Cross-validation
+
+Two validation schemes, matching the pipeline timeline (calves genotyped in year 2,
+CFIT phenotypes only from year 4):
+
+* **Forward:** train on generations `r head(gens, -1)`; predict the youngest generation
+  (`r tail(gens, 1)`) with their phenotypes masked. This mirrors predicting calves before they are recorded.
+* **k-fold:** `r params$n_folds` random folds of the genotyped cows, stratified by breed x country x generation.
+
+Metrics, computed on validation cows only:
+
+* `acc_TBV` = cor(EBV, TBV) - true accuracy (available only because this is a simulation);
+* `PA` = cor(EBV, y\*) with y\* = phenotype minus its herd-generation mean (what real data allow);
+* `acc_PA` = PA / sqrt(h^2^) using the file-00 h^2^ for the breed mix;
+* `acc_within_breed` = cor(EBV, TBV) within each breed, averaged with weights n per breed. This is
+  the accuracy that matters for ranking candidates, because selection is within breed. The pooled
+  `acc_TBV` also rewards or penalises breed-level offsets in the EBVs;
+* `slope` = regression of TBV on EBV (1 = unbiased; < 1 = over-dispersed).
+* `h2_REML_fit` = h^2^ implied by the variance components that REML estimated in that training set
+  (BayesA/B: not applicable). A value near 0 means REML reached the boundary and the EBVs are
+  shrunk to almost nothing, which shows up as a near-zero accuracy and slope.
+
+```{r cv_setup}
+gd[, fold := NA_integer_]
+gd[, fold := sample(rep(seq_len(params$n_folds), length.out = .N)),
+   by = .(breed, country, generation)]
+schemes <- c(list(forward = gd[generation == max(gens), id]),
+             lapply(seq_len(params$n_folds), function(k) gd[fold == k, id]))
+names(schemes)[-1] <- paste0("fold", seq_len(params$n_folds))
+for (tr in traits) dat[, paste0("ys_", tr) := get(tr) - mean(get(tr)), by = hg]
+
+```
+
+```{r cv_run}
+score <- function(ebv, val, tr) {
+  v <- dat[id %in% val]
+  e <- ebv[as.character(v$id)]
+  tbv <- v[[paste0("TBV_", tr)]]; ys <- v[[paste0("ys_", tr)]]
+  # within-breed accuracy (selection in file 04 is within breed), weighted by n per breed
+  wb <- data.table(b = v$breed, e = e, t = tbv)[, .(r = cor(e, t), n = .N), by = b]
+  data.table(acc_TBV = cor(e, tbv), acc_within_breed = sum(wb$r * wb$n) / sum(wb$n),
+             PA = cor(e, ys),
+             acc_PA = cor(e, ys) / sqrt(h2_mix[[tr]]),
+             slope = unname(coef(lm(tbv ~ e))[2]))
+}
+
+res <- list(); ebv_fwd <- list()
+for (tr in params$focus_traits) for (sc in names(schemes)) {
+  val <- schemes[[sc]]
+  dtr <- copy(dat)[!(id %in% val)]                  # masked = removed from training data
+  gtr <- dtr[genotyped == TRUE]
+  out <- list(); h2f <- list(); secs <- list()      # h2f: h2 implied by each REML fit; secs: fit time
+  h2_of <- function(f) unname(f$varA / (f$varA + f$varE))
+  # ABLUP (pedigree, REML)
+  f <- fit_sommer(dtr, Ainv, tr);    out$ABLUP <- f$ebv; h2f$ABLUP <- h2_of(f)
+  # GBLUP (REML) and the same prediction via back-solved SNP effects
+  f <- fit_sommer(gtr, Gi_reg, tr);  out$GBLUP <- f$ebv; h2f$GBLUP <- h2f$GBLUP_snp <- h2_of(f)
+  u_snp <- snp_from_gblup(f$ebv[gid], Gi_reg)
+  out$GBLUP_snp <- setNames(as.vector(Z %*% u_snp), gid)
+  # ssGBLUP
+  tm <- system.time(f <- fit_sommer(dtr, Hinv, tr))[["elapsed"]]
+  out$ssGBLUP <- f$ebv; h2f$ssGBLUP <- h2_of(f); secs$ssGBLUP <- tm
+  # ssGBLUP with breed metafounders (G05 and A^Gamma; no G rescaling)
+  tm <- system.time(f <- fit_sommer(dtr, Hinv_MF, tr))[["elapsed"]]
+  out$ssGBLUP_MF <- f$ebv; h2f$ssGBLUP_MF <- h2_of(f); secs$ssGBLUP_MF <- tm
+  # weighted ssGBLUP (Wang et al. 2012): 2 iterations; each re-fits ssGBLUP with the new
+  # SNP weights. Weights use EBVs of genotyped TRAINING cows only (no validation leakage).
+  train_g <- intersect(gid, as.character(gtr$id))
+  d_snp <- rep(1, ncol(Z)); a_tr <- f$ebv[train_g]
+  for (it in 1:2) {
+    Gd_tr <- tcrossprod(sweep(Z[train_g, ], 2, sqrt(d_snp), `*`)) / k2pq
+    u0 <- d_snp * as.vector(crossprod(Z[train_g, ],
+                  solve(Gd_tr + 0.01 * diag(length(train_g)), a_tr))) / k2pq
+    d_snp <- u0^2 * 2 * p * (1 - p); d_snp <- d_snp / mean(d_snp)
+    Gw <- tcrossprod(sweep(Z, 2, sqrt(d_snp), `*`)) / k2pq; dimnames(Gw) <- dimnames(G)
+    fw <- fit_sommer(dtr, make_Hinv(Gw), tr); a_tr <- fw$ebv[train_g]
+  }
+  out$wssGBLUP <- fw$ebv; h2f$wssGBLUP <- h2_of(fw)
+  # rrBLUP (SNP effects)
+  f <- fit_rrblup(gtr, tr)
+  out$rrBLUP <- setNames(as.vector(W %*% f$u), gid); h2f$rrBLUP <- h2_of(f)
+  # BayesA / BayesB (SNP effects)
+  for (m in c("BayesA", "BayesB")) {
+    f <- fit_bglr(gtr, tr, m)
+    out[[m]] <- setNames(as.vector(W %*% f$u), gid)
+  }
+  if (sc == "forward") {                            # keep forward EBVs for inspection
+    v <- dat[id %in% val, c("id", "breed", paste0("TBV_", tr)), with = FALSE]
+    setnames(v, 3, "TBV")
+    for (m in names(out)) v[, (m) := out[[m]][as.character(id)]]
+    ebv_fwd[[tr]] <- cbind(trait = tr, v)
+  }
+  for (m in names(out)) res[[paste(tr, sc, m)]] <-
+    cbind(data.table(trait = tr, scheme = sc, model = m), score(out[[m]], val, tr),
+          h2_REML_fit = if (is.null(h2f[[m]])) NA_real_ else h2f[[m]],
+          fit_sec = if (is.null(secs[[m]])) NA_real_ else secs[[m]])
+  progress(tr, " ", sc, " done ", format(Sys.time() - t0))
+}
+res <- rbindlist(res)
+```
+
+**Sanity check:** `GBLUP` and `GBLUP_snp` must give identical accuracies, because predicting
+from back-solved SNP effects is algebraically equivalent to GBLUP.
+
+```{r check_equiv}
+chk <- dcast(res[model %in% c("GBLUP", "GBLUP_snp")], trait + scheme ~ model, value.var = "acc_TBV")
+chk[, diff := abs(GBLUP - GBLUP_snp)]
+kable(chk, digits = 4)
+```
+
+# Results
+
+```{r results_table}
+summ <- res[model != "GBLUP_snp",
+            .(acc_TBV = mean(acc_TBV), acc_TBV_sd = sd(acc_TBV),
+              acc_within_breed = mean(acc_within_breed),
+              PA = mean(PA), acc_PA = mean(acc_PA), slope = mean(slope),
+              h2_fit_min = min(h2_REML_fit), h2_fit_max = max(h2_REML_fit)),
+            by = .(trait, model, scheme_type = ifelse(scheme == "forward", "forward", "k-fold"))]
+kable(summ[order(trait, scheme_type, -acc_TBV)], digits = 3,
+      caption = "Mean accuracy by trait, model and validation scheme (sd across folds)")
+```
+
+```{r results_plot, fig.width=10, fig.height=5}
+ggplot(res[model != "GBLUP_snp" & scheme != "forward"],
+       aes(model, acc_TBV, fill = model)) +
+  geom_boxplot(show.legend = FALSE) +
+  geom_point(data = res[model != "GBLUP_snp" & scheme == "forward"],
+             shape = 4, size = 3, colour = "black") +
+  facet_wrap(~trait) +
+  labs(y = "cor(EBV, TBV)", x = NULL,
+       title = "Accuracy across k-fold CV (boxes) and forward validation (x)") +
+  theme_bw() + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+## Which single-step model is more reliable?
+
+Both single-step models use the same data, pedigree and REML. They differ only in how the genomic and
+pedigree relationships are made compatible: pooled a + bG rescaling (`ssGBLUP`) versus breed
+metafounders (`ssGBLUP_MF`). **Decision rule (mine, fixed before seeing the result):**
+
+1. Primary criterion: mean **within-breed accuracy** over all focus traits and validation sets, because
+   selection in file 04 is within breed.
+2. If the two differ by less than one standard error of the paired difference, the accuracies are
+   treated as equal and the model whose **dispersion slope** is closer to 1 wins (less bias in
+   EBV scale, which matters when EBVs of different breeds or ages are compared).
+
+The chosen model is written to `ssgblup_choice_<focus traits>.csv` and is the single-step model used in file 04.
+
+```{r ss_choice}
+pw <- dcast(res[model %in% c("ssGBLUP", "ssGBLUP_MF")], trait + scheme ~ model,
+            value.var = c("acc_within_breed", "slope", "fit_sec"))
+pw[, d_acc := acc_within_breed_ssGBLUP_MF - acc_within_breed_ssGBLUP]
+se_d <- sd(pw$d_acc) / sqrt(nrow(pw))
+ss_sum <- data.table(model = c("ssGBLUP", "ssGBLUP_MF"),
+  acc_within_breed = c(mean(pw$acc_within_breed_ssGBLUP), mean(pw$acc_within_breed_ssGBLUP_MF)),
+  mean_abs_slope_dev = c(mean(abs(pw$slope_ssGBLUP - 1)), mean(abs(pw$slope_ssGBLUP_MF - 1))),
+  mean_fit_sec = c(mean(pw$fit_sec_ssGBLUP), mean(pw$fit_sec_ssGBLUP_MF)))
+kable(ss_sum, digits = 3, caption = "Single-step variants, averaged over traits and validation sets")
+md <- mean(pw$d_acc)
+winner <- if (abs(md) >= se_d) { if (md > 0) "ssGBLUP_MF" else "ssGBLUP" } else
+  ss_sum[which.min(mean_abs_slope_dev), model]
+reason <- if (abs(md) >= se_d) "within-breed accuracy differs by at least 1 SE" else
+  "accuracies equal within 1 SE; slope closer to 1"
+fwrite(data.table(winner = winner, reason = reason, mean_diff_acc_MF_minus_pooled = md, se_diff = se_d,
+                  focus_traits = paste(params$focus_traits, collapse = ",")),
+       file.path(params$sim_dir, paste0("ssgblup_choice_", paste(params$focus_traits, collapse = "_"), ".csv")))
+```
+
+**Result:** mean within-breed accuracy difference (MF minus pooled) = `r round(md, 3)`
+(SE `r round(se_d, 3)`); chosen model: **`r winner`** (`r reason`).
+
+## Theoretical expectation (sanity check, not a result)
+
+Expected accuracy from Daetwyler et al. (2008, *PLoS ONE* 3:e3395),
+r = sqrt(N h^2^ / (N h^2^ + M~e~)), with M~e~ = 2 N~e~ L / log(4 N~e~ L) (Goddard 2009, *Genetica*).
+N~e~ = 90 (CATTLE history), L = genome length in Morgans of the simulated chromosomes (29 since 7 Nov 2026).
+This formula assumes one homogeneous population, so it is only a rough reference here.
+
+```{r theory}
+L  <- sum(sapply(SP$genMap, function(x) max(x)))
+Ne <- 90
+Me <- 2 * Ne * L / log(4 * Ne * L)
+N_train <- nrow(gd) * (params$n_folds - 1) / params$n_folds
+theo <- data.table(trait = params$focus_traits,
+                   h2 = h2_mix[params$focus_traits])
+theo[, r_expected := sqrt(N_train * h2 / (N_train * h2 + Me))]
+cat("Genome length L =", round(L, 2), "M | Me =", round(Me), "| N_train =", N_train, "\n")
+kable(theo, digits = 3)
+```
+
+# Save
+
+```{r save}
+tag <- paste(params$focus_traits, collapse = "_")
+fwrite(res, file.path(params$sim_dir, paste0("cv_results_", tag, ".csv")))
+fwrite(rbindlist(ebv_fwd), file.path(params$sim_dir, paste0("ebv_forward_", tag, ".csv")))
+if (nrow(vc)) fwrite(vc, file.path(params$sim_dir, "vc_gblup.csv"))
+saveRDS(list(G = G, A22 = A22, gid = gid, p = p, keep_snp = keep),
+        file.path(params$sim_dir, "kernels.rds"))
+cat("Run time:", format(Sys.time() - t0), "\n")
+```
+
+```{r session}
+sessionInfo()
+```

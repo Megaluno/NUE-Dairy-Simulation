@@ -1,0 +1,141 @@
+---
+title: "00b - Update check: Saved Feed replaces feeding rate and DMI; CFIT population (7 Nov 2026)"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    code_folding: show
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+library(data.table); library(knitr)
+```
+
+# Purpose
+
+This file **does not change the pipeline**. It compares the parameter set written by
+`00_genetic_parameters.Rmd` (7 Nov 2026) with the previous one (archived in
+`archive_rg28_2026-11-05/params/`, used for the runs of 5 Nov 2026), so every change is visible
+before files 01-05 are re-run. The previous version of this file (resilience QR vs MA and Saved
+Feed as raw vs production-corrected DMI, 4 Nov) is in the same archive folder.
+
+Changes made on 7 Nov 2026, all at your request or by your choice:
+
+1. Feeding rate (FR) is replaced by **Saved Feed (SF)**; DMI is dropped; ECM and body weight are
+   not added as traits.
+2. SF enters with its own published values: h^2^ = ReFI (Lidauer et al. 2023) and correlations =
+   NAV Saved Feed index correlations (NAV 2026 note, Table 4), cow-weighted over breeds.
+3. Population: CFIT installations (Lassen & Borchersen slides): 28,400 cows; 40 single-breed herds
+   (largest-remainder rounding of 39 farms scaled to 40).
+
+```{r load}
+old_dir <- "archive_rg28_2026-11-05/params"; new_dir <- "params"
+h2_old <- fread(file.path(old_dir, "h2.csv")); h2_new <- fread(file.path(new_dir, "h2.csv"))
+RG_old <- readRDS(file.path(old_dir, "RG_matrix.rds")); RG_new <- readRDS(file.path(new_dir, "RG_matrix.rds"))
+src_old <- fread(file.path(old_dir, "rg_sourced.csv")); src_new <- fread(file.path(new_dir, "rg_sourced.csv"))
+iw_old <- fread(file.path(old_dir, "index_weights.csv")); iw_new <- fread(file.path(new_dir, "index_weights.csv"))
+sp_old <- fread(file.path(old_dir, "breed_country_split.csv")); sp_new <- fread(file.path(new_dir, "breed_country_split.csv"))
+hd_old <- fread(file.path(old_dir, "herds.csv")); hd_new <- fread(file.path(new_dir, "herds.csv"))
+```
+
+# Trait set and heritabilities
+
+```{r traits}
+tr <- data.table(trait = union(h2_old$code, h2_new$code))
+tr[, `:=`(before = trait %in% h2_old$code, now = trait %in% h2_new$code)]
+kable(tr, caption = "Traits before (5 Nov) and now (7 Nov)")
+hh <- merge(h2_old[, .(code, HOL_old = HOL, RDC_old = RDC, JER_old = JER)],
+            h2_new[, .(code, HOL_new = HOL, RDC_new = RDC, JER_new = JER)], by = "code", all = TRUE)
+kable(hh, caption = "Heritabilities before and now (NA = trait not in that set)")
+```
+
+# Population and herds
+
+```{r population}
+pop <- merge(sp_old[, .(cows_old = sum(n)), by = .(breed, country)],
+             sp_new[, .(cows_new = sum(n), herds_new = sum(farms)), by = .(breed, country)], by = c("breed", "country"), all = TRUE)
+kable(pop, caption = "Cows per breed x country before (ICAR 2026 abstract, equal split) and now (CFIT slides, your rule)")
+cat(sprintf("Cows: %d before, %d now. Herds: %d mixed-breed before, %d single-breed now.\n",
+            sum(sp_old$n), sum(sp_new$n), nrow(hd_old), nrow(hd_new)))
+```
+
+# Sourced correlations: removed, added, kept
+
+```{r pairs}
+key <- function(d) d[, pair := paste(pmin(t1, t2), pmax(t1, t2), sep = "-")]
+key(src_old); key(src_new)
+removed <- src_old[!pair %in% src_new$pair, .(pair, rg, source)]
+added   <- src_new[!pair %in% src_old$pair, .(pair, rg, source)]
+changed <- merge(src_old[, .(pair, rg_old = rg)], src_new[, .(pair, rg_new = rg)], by = "pair")[rg_old != rg_new]
+kable(removed, caption = "Removed (DMI and FR are no longer traits)")
+kable(added, caption = "Added")
+kable(changed, caption = "Kept but value changed (cow weights now CFIT 28,400)")
+cat(sprintf("Sourced pairs: %d of %d before, %d of %d now.\n",
+            nrow(src_old), choose(nrow(h2_old), 2), nrow(src_new), choose(nrow(h2_new), 2)))
+```
+
+# Saved Feed correlations: which NAV source?
+
+Two NAV sets of Saved Feed index correlations exist for genomic bull calves: Stephansen et al.
+(2025, Interbull Bull 61, Table 2; bulls born 2022) and the NAV note *Economic weight of Saved feed
+in NTM* (2026, Table 4; bulls born 2022-2024). File 00 uses the NAV 2026 note (recent over old,
+your rule). The table shows how much the choice matters, with the same CFIT cow weights and the same
+sign reversals (Fertility and Udder health/Mastitis reversed into ICF and SCS).
+
+```{r sf_sources}
+n_breed <- sp_new[, .(n = sum(n)), by = breed][, setNames(n, breed)]
+w <- function(h, r, j) sum(n_breed[c("HOL", "RDC", "JER")] * c(h, r, j)) / sum(n_breed)
+# the NAV Yield index correlation is applied to both MY and PY (your choice, 7 Nov 2026)
+sf <- data.table(pair = c("MY-SF", "PY-SF", "ICF-SF", "SCS-SF", "LONG-SF"), sign = c(1, 1, -1, -1, 1),
+  NAV2026_HOL = c(0.32, 0.32, -0.06, -0.11, -0.02), NAV2026_RDC = c(0.13, 0.13, 0.06, 0.00, 0.15), NAV2026_JER = c(0.35, 0.35, -0.17, -0.08, -0.08),
+  Steph2025_HOL = c(0.26, 0.26, -0.02, -0.11, 0.01), Steph2025_RDC = c(0.07, 0.07, 0.12, 0.06, 0.17), Steph2025_JER = c(0.23, 0.23, -0.14, -0.11, -0.09))
+sf[, `:=`(NAV2026 = sign * mapply(w, NAV2026_HOL, NAV2026_RDC, NAV2026_JER),
+          Steph2025 = sign * mapply(w, Steph2025_HOL, Steph2025_RDC, Steph2025_JER))][, diff := NAV2026 - Steph2025]
+kable(sf[, .(pair, NAV2026, Steph2025, diff)], digits = 3,
+      caption = "Cow-weighted SF correlations from the two NAV sources (Stephansen 2025: udder trait = Mastitis)")
+cat(sprintf("Largest difference between the two sources: %.3f\n", max(abs(sf$diff))))
+```
+
+# Matrix and implied values
+
+```{r matrix}
+ev <- eigen(RG_new, symmetric = TRUE, only.values = TRUE)$values
+cat(sprintf("Smallest eigenvalue of the matrix used: %.4f\n", min(ev)))
+ix <- which(upper.tri(RG_new), arr.ind = TRUE)
+d <- data.table(t1 = rownames(RG_new)[ix[, 1]], t2 = colnames(RG_new)[ix[, 2]], rg = RG_new[ix])
+key(d); d[, sourced := pair %in% src_new$pair]
+kable(d[sourced == FALSE][order(-abs(rg))][abs(rg) >= 0.05], digits = 3,
+      caption = "Unknown pairs: implied values |r| >= 0.05 (weighted bending, not estimates)")
+both <- intersect(rownames(RG_old), rownames(RG_new))
+dd <- data.table(t1 = both[row(diag(length(both)))], t2 = both[col(diag(length(both)))],
+                 old = as.vector(RG_old[both, both]), new = as.vector(RG_new[both, both]))[t1 < t2][, change := new - old]
+kable(dd[abs(change) >= 0.03][order(-abs(change))], digits = 3,
+      caption = "Pairs present in both sets whose value moved by 0.03 or more (incl. implied values)")
+```
+
+# Index theory: what the change does to NTM selection
+
+Response per unit selection intensity on true breeding values, (G w)~j~ / sqrt(w'Gw), for the NTM
+index without NUE weight (GS_NTM) and with NUE weight 0.75. Before: Saved Feed = production-corrected
+DMI; now: Saved Feed = SF. All traits in genetic SD.
+
+```{r theory}
+resp <- function(G, w) drop(G %*% w) / sqrt(drop(t(w) %*% G %*% w))
+th <- function(G, iw, lab) rbindlist(lapply(c("HOL", "RDC", "JER"), function(b) rbindlist(lapply(intersect(c("GS_NTM", "GS_NTM_NUE75", "GS_NTM_NUE35_MUN", "GS_NTM_NUE35_CH4"), iw$index), function(s) {
+  x <- iw[index == s & breed == b]; wv <- setNames(x$weight, x$trait)[rownames(G)]; wv[is.na(wv)] <- 0
+  r <- resp(G, wv); data.table(set = lab, breed = b, index = s, trait = names(r), resp = r)
+}))))
+tt <- rbind(th(RG_old, iw_old, "before"), th(RG_new, iw_new, "now"))
+kable(dcast(tt[trait %in% c("NUE", "MY", "PY", "CH4", "MUN", "SCS", "ICF", "LONG", "LNVAR", "SF", "DMI")],
+            trait + index ~ set + breed, value.var = "resp"), digits = 3,
+      caption = "Response per unit i (genetic SD), before vs now")
+```
+
+```{r save}
+fwrite(tt, "params/update_check_index_theory.csv")
+```
+
+```{r session}
+sessionInfo()
+```

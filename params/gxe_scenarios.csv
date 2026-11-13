@@ -1,0 +1,3 @@
+scenario,rg_between_countries,status
+NAV assumption (no GxE),1,matches NAV model
+Moderate GxE (sensitivity),0.9,scenario anchored on Mulder et al. 2013 (> 0.9 within Sweden)

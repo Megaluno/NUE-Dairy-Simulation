@@ -1,0 +1,411 @@
+---
+title: "03 - Multi-trait Bayesian models (Diagonal, Unstructured, Factor-analytic) and GxE"
+author: "Prepared for Emmanuel Ismaila"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    code_folding: show
+params:
+  sim_dir: "sim_TEST_rg1.00"
+  mt_iter: 6000
+  mt_burn: 2000
+  fa_factors: 2
+  run_gxe: true                 # Part B (GxE); false = multi-trait only
+  run_mt: true                  # multi-trait MCMC (Part A); false = GxE only
+  gxe_traits: ["MY", "NUE"]
+  gxe_sommer_models: ["M1_main", "M2_CS"]   # add "M3_DIAG", "M4_US", "M5_FA" on a cluster
+  gxe_reml_iter: 100            # raised from 30 on 7 Nov 2026 (your choice): 30 did not converge for M2_CS
+  seed: 20261102
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+suppressPackageStartupMessages({
+  library(AlphaSimR); library(data.table); library(Matrix); library(BGLR)
+  library(sommer); library(ggplot2); library(knitr)
+})
+set.seed(params$seed)
+t0 <- Sys.time()
+
+# progress log (knitr discards message() output when message = FALSE)
+progress <- function(...) cat(format(Sys.time(), "%H:%M:%S"), ..., "\n",
+                              file = file.path(params$sim_dir, "progress.log"), append = TRUE)
+```
+
+# Inputs
+
+Uses the genotyped cows and the VanRaden G built in `02_genomic_prediction.Rmd`.
+
+```{r load}
+st   <- readRDS(file.path(params$sim_dir, "burnin_state.rds")); SP <- st$SP
+kern <- readRDS(file.path(params$sim_dir, "kernels.rds"))
+phen <- fread(file.path(params$sim_dir, "phenotypes.csv"))
+RG   <- readRDS("params/RG_matrix.rds")
+h2_par <- fread("params/h2.csv")
+traits <- st$traits; nT <- length(traits)
+gid <- kern$gid; G <- kern$G
+d <- phen[match(as.integer(gid), id)]
+stopifnot(identical(as.character(d$id), gid))
+d[, hg := paste(herd, generation, sep = "_g")]
+cat("Genotyped cows:", nrow(d), "| generations:", paste(sort(unique(d$generation)), collapse = ","), "\n")
+```
+
+# Part A - Multi-trait Bayesian GBLUP (BGLR::Multitrait)
+
+Model, for the *n x t* matrix of phenotypes:
+
+**Y** = **1**μ' + **X**~breed~**B** + **U** + **E**, vec(**U**) ~ N(0, **Σ**~G~ ⊗ **G**), vec(**E**) ~ N(0, **Σ**~R~ ⊗ **I**)
+
+Σ~G~ and Σ~R~ are modelled with the same structure within each model:
+
+| Model | Σ~G~ | Σ~R~ |
+|---|---|---|
+| MT-DIAG | diagonal (no genetic covariances) | diagonal |
+| MT-UN | unstructured (inverse-Wishart) | unstructured |
+| MT-FA | factor-analytic, k = `r params$fa_factors` factors | factor-analytic, k = `r params$fa_factors` |
+
+**Pre-processing (simplification, flagged):** herd-generation means are removed from each
+trait before fitting (there are too many herd-generation levels to sample as fixed effects in
+an 11-trait MCMC). Breed is fitted as a fixed effect. Traits are standardised to unit
+variance so one prior scale works for all traits; correlations and h^2^ are scale-free.
+
+**Limitation of the simulation itself:** file 01 simulated residuals and herd effects as
+**independent across traits** (no residual correlations were sourced). So the true Σ~R~ is
+diagonal here, and any off-diagonal in an estimated Σ~R~ is estimation noise.
+
+```{r mt_data, eval=isTRUE(params$run_mt)}
+# ave() keeps the row order; data.table's "by =" would regroup rows by hg and break the
+# alignment with G and the true breeding values (a bug found in an earlier version)
+Y <- sapply(traits, function(tr) d[[tr]] - ave(d[[tr]], d$hg))
+stopifnot(identical(colnames(Y), traits), nrow(Y) == nrow(G))
+Y <- scale(Y)
+Xb <- model.matrix(~ breed, data = d)[, -1, drop = FALSE]
+TBV <- as.matrix(d[, paste0("TBV_", traits), with = FALSE]); colnames(TBV) <- traits
+
+# Validation: youngest generation
+val <- which(d$generation == max(d$generation))
+scenarios <- list(
+  all_masked = { Ym <- Y; Ym[val, ] <- NA; Ym },
+  # realistic: N traits recorded on few cows -> NUE and MUN missing, other traits observed
+  N_masked   = { Ym <- Y; Ym[val, c("NUE", "MUN")] <- NA; Ym })
+sapply(scenarios, function(m) colSums(is.na(m)))
+```
+
+```{r mt_fit, eval=isTRUE(params$run_mt)}
+eigG <- eigen(G + 1e-6 * diag(nrow(G)), symmetric = TRUE)  # reused by every RKHS fit
+cov_spec <- function(type) switch(type,
+  DIAG = list(type = "DIAG"),
+  UN   = list(type = "UN"),
+  FA   = list(type = "FA", M = matrix(TRUE, nT, params$fa_factors), varimax = TRUE, var = 100))
+
+run_mt <- function(Ym, type) {
+  tmp <- tempfile("mt_"); dir.create(tmp)
+  Multitrait(y = Ym,
+             ETA = list(list(X = Xb, model = "FIXED"),
+                        list(EVD = eigG, model = "RKHS",
+                             Cov = cov_spec(type))),
+             resCov = cov_spec(type),
+             nIter = params$mt_iter, burnIn = params$mt_burn, thin = 5,
+             saveAt = paste0(tmp, "/"), verbose = FALSE)
+}
+
+mt <- list()
+for (sc in names(scenarios)) for (type in c("DIAG", "UN", "FA")) {
+  fm <- run_mt(scenarios[[sc]], type)
+  # keep only what is used later (full fits hold large matrices -> out of memory)
+  mt[[paste(sc, type)]] <- list(ETA = list(NULL, list(Cov = list(Omega = fm$ETA[[2]]$Cov$Omega),
+                                                       u = fm$ETA[[2]]$u)),
+                                resCov = list(R = fm$resCov$R), fit = list(DIC = fm$fit$DIC))
+  rm(fm); invisible(gc())
+  progress(sc, " ", type, " done ", format(Sys.time() - t0))
+}
+```
+
+## Variance components and heritability
+
+```{r mt_vc, eval=isTRUE(params$run_mt)}
+vc_mt <- rbindlist(lapply(c("DIAG", "UN", "FA"), function(type) {
+  fm <- mt[[paste("all_masked", type)]]
+  SG <- fm$ETA[[2]]$Cov$Omega; SR <- fm$resCov$R
+  data.table(model = paste0("MT-", type), trait = traits,
+             h2 = diag(SG) / (diag(SG) + diag(SR)))
+}))
+# true h2 within breed x generation, as in file 02 (breed and herd x generation are fixed effects)
+h2_true <- data.table(trait = traits, h2_true_sample = sapply(traits, function(tr) {
+  dd <- d[-val]; t <- dd[[paste0("TBV_", tr)]]; yc <- dd[[tr]] - ave(dd[[tr]], dd$hg)
+  var(t - ave(t, dd$breed, dd$generation)) / var(yc - ave(yc, dd$breed, dd$generation)) }))
+kable(merge(dcast(vc_mt, trait ~ model, value.var = "h2"), h2_true, by = "trait"), digits = 3,
+      caption = "Posterior-mean h2 by covariance structure vs simulated h2 in the training cows")
+```
+
+## Genetic correlations: recovered vs simulated
+
+Three references are shown: the input r~g~ matrix from file 00 (`r sum(fread('params/rg_sourced.csv')[, .N])` of 55 pairs sourced; the rest implied by weighted bending),
+the **realised** correlation among true breeding values in the training cows, and the estimates.
+
+```{r mt_rg, fig.width=10, fig.height=4, eval=isTRUE(params$run_mt)}
+rg_of <- function(S) { r <- cov2cor(S); dimnames(r) <- list(traits, traits); r }
+real_rg <- cor(TBV[-val, ])
+pairs <- which(upper.tri(RG), arr.ind = TRUE)
+rg_tab <- rbindlist(lapply(c("UN", "FA"), function(type) {
+  est <- rg_of(mt[[paste("all_masked", type)]]$ETA[[2]]$Cov$Omega)
+  data.table(model = paste0("MT-", type), t1 = traits[pairs[, 1]], t2 = traits[pairs[, 2]],
+             input = RG[pairs], realised = real_rg[pairs], estimated = est[pairs])
+}))
+kable(rg_tab[abs(input) > 0, ], digits = 2, caption = "Pairs with a sourced (non-zero) input rg")
+kable(rg_tab[, .(rmse_vs_realised = sqrt(mean((estimated - realised)^2)),
+                 cor_with_realised = cor(estimated, realised)), by = model], digits = 3)
+ggplot(rg_tab, aes(realised, estimated)) + geom_abline(lty = 2) + geom_point(alpha = .6) +
+  facet_wrap(~model) + labs(x = "realised rg (true breeding values)", y = "posterior mean rg") +
+  theme_bw()
+```
+
+**Prior-dominance check.** BGLR sets default priors so that, a priori, about half of the
+phenotypic (co)variance is genetic (`R2 = 0.5`, split across the terms). If the posterior h^2^
+values above are similar for all traits, regardless of their very different simulated h^2^
+(0.05 for ICF/LONG vs 0.4 for MY), the data have not overcome the prior. Likewise, if
+estimated r~g~ are shrunk towards 0, as happened in the TEST run (MY-PY 0.34 vs realised 0.85
+with 900 cows and 600 iterations), the result reflects the prior, not the population.
+Conclusions about the covariance structures should only be drawn when this check passes.
+
+## Model fit and predictive accuracy
+
+```{r mt_acc, eval=isTRUE(params$run_mt)}
+acc_mt <- rbindlist(lapply(names(mt), function(nm) {
+  fm <- mt[[nm]]; U <- fm$ETA[[2]]$u
+  data.table(scenario = sub(" .*", "", nm), model = paste0("MT-", sub(".* ", "", nm)),
+             trait = traits,
+             acc_TBV = sapply(seq_len(nT), function(j) cor(U[val, j], TBV[val, j])),
+             DIC = fm$fit$DIC)
+}))
+kable(dcast(acc_mt, scenario + trait ~ model, value.var = "acc_TBV"), digits = 3,
+      caption = "Accuracy (cor with TBV) in the youngest generation")
+kable(unique(acc_mt[, .(scenario, model, DIC)]), digits = 1, caption = "DIC (lower is better)")
+```
+
+**How to read the N_masked scenario:** NUE and MUN are missing on validation cows while
+their other `r nT - 2` traits are recorded. A gain of MT-UN/MT-FA over MT-DIAG for NUE there is the
+benefit of borrowing information through genetic correlations. Its size depends on the
+r~g~ assumed in file 00, mainly NUE with MY and PY (Tavernier et al. 2024; file 00).
+
+# Part B - Genotype-by-environment (sommer)
+
+Genetic effects of the same cow in different countries are modelled as correlated traits.
+Each cow is recorded in one country only, so between-country covariances are estimated
+through **relatives across countries** (via G).
+
+| Model | Genetic (country x animal) | Interpretation |
+|---|---|---|
+| M1 main | one variance | no GxE |
+| M2 CS | homogeneous variance, one between-country correlation (`corgm`) | uniform GxE |
+| M3 DIAG | heterogeneous variance, covariance 0 (`dsm`) | countries independent |
+| M4 US | full unstructured (`usm`) | all variances and correlations |
+| M5 FA | factor-analytic, 1 factor (`fam`) | parsimonious US |
+
+Residual variance is heterogeneous by country in every model (`dsm(country)`), as in the NAV
+yield model (NAV May 2024, Section 4). Fixed effects: breed + herd x generation; because herds are single-breed (7 Nov 2026), breed is contained in herd x generation and is dropped (same rule as file 02).
+
+**THI reaction norm:** not run yet. Temperature-humidity index series for the four
+countries have not been sourced (see the open items in file 00).
+
+```{r gxe_truth, eval=isTRUE(params$run_gxe)}
+# Realised between-country genetic correlation in the simulation (truth)
+# 8 Nov 2026 (memory): genetic values per saved generation, stacked; same rows as gv() of the merged population
+GV <- do.call(rbind, lapply(unname(st$kept_cows), function(p) { g <- gv(p); rownames(g) <- p@id; g }))
+GV <- GV[gid, , drop = FALSE]
+st$pop <- NULL; st$kept_cows <- NULL; invisible(gc())   # 8 Nov 2026: free the genomes (7 GB machine); not used below
+countries <- unique(fread("params/breed_country_split.csv")$country)
+if (st$gxe_rg < 1) {
+  true_rg_c <- sapply(params$gxe_traits, function(tr) {
+    cols <- paste(countries, tr, sep = "_"); r <- cor(GV[, cols])
+    mean(r[upper.tri(r)])
+  })
+} else true_rg_c <- setNames(rep(1, length(params$gxe_traits)), params$gxe_traits)
+cat("Simulated between-country rg (input):", st$gxe_rg, "\n"); print(round(true_rg_c, 3))
+```
+
+```{r gxe_fit, eval=isTRUE(params$run_gxe)}
+Gi <- solve(0.99 * G + 0.01 * diag(nrow(G))); dimnames(Gi) <- dimnames(G)
+Gu <- as(Gi, "CsparseMatrix"); attr(Gu, "inverse") <- TRUE
+dg <- as.data.frame(copy(d)[, `:=`(idf = factor(as.character(id), levels = gid),
+                                   country = factor(country), breed = factor(breed),
+                                   hg = factor(hg))])
+# REML iteration cap. The 4-country x animal Kronecker with a dense G^-1 makes each iteration
+# costly (one M2_CS fit ran > 20 min at 1,500 cows with 100 iterations), so the cap is a parameter.
+ctl <- mmes_control(convergence = list(maxIters = as.integer(params$gxe_reml_iter)),
+                    diagnostics = list(verbose = FALSE))
+fit_gxe <- function(tr, form) {
+  dg$y <- dg[[tr]]
+  # herds are single-breed (7 Nov 2026), so breed is nested in herd-generation and breed + hg is
+  # rank deficient; same rule as file 02 (fixed_formula): drop breed when hg already contains it
+  fx <- if (all(as.data.table(dg)[, uniqueN(breed), by = hg]$V1 == 1)) y ~ hg else y ~ breed + hg
+  tryCatch(mmes(fx, random = form,
+                rcov = ~vsm(dsm(country), ism(units)), data = dg, control = ctl),
+           error = function(e) { message(tr, ": ", conditionMessage(e)); NULL })
+}
+forms <- list(
+  M1_main = ~vsm(ism(idf), Gu = Gu),
+  M2_CS   = ~vsm(corgm(country), ism(idf), Gu = Gu),
+  M3_DIAG = ~vsm(dsm(country), ism(idf), Gu = Gu),
+  M4_US   = ~vsm(usm(country), ism(idf), Gu = Gu),
+  M5_FA   = ~vsm(fam(country, k = 1), ism(idf), Gu = Gu))
+forms <- forms[intersect(c("M1_main", params$gxe_sommer_models), names(forms))]
+summ_gxe <- function(fm, m) {
+  if (is.null(fm)) return(NULL)
+  cm <- if (m %in% c("M2_CS", "M4_US", "M5_FA"))
+    tryCatch(covmatrix_mmes(fm, 1, se = TRUE), error = function(e) NULL) else NULL
+  list(llik = as.numeric(fm$llik[length(fm$llik)]), convergence = fm$convergence,
+       AIC = fm$AIC, BIC = fm$BIC, cm = cm)
+}
+gxe <- list()
+for (tr in params$gxe_traits) for (m in names(forms)) {
+  gxe[[paste(tr, m)]] <- summ_gxe(fit_gxe(tr, forms[[m]]), m); invisible(gc())
+  progress(tr, " ", m, " done ", format(Sys.time() - t0))
+}
+```
+
+```{r gxe_results, eval=isTRUE(params$run_gxe)}
+gxe_tab <- rbindlist(lapply(names(gxe), function(nm) {
+  fm <- gxe[[nm]]; if (is.null(fm)) return(NULL)
+  tr <- sub(" .*", "", nm); m <- sub(".* ", "", nm)
+  rg_c <- NA_real_; rg_se <- NA_real_
+  if (m %in% c("M2_CS", "M4_US", "M5_FA")) {
+    cm <- fm$cm
+    if (!is.null(cm)) {
+      ut <- upper.tri(cm$correlation)
+      rg_c  <- mean(cm$correlation[ut])
+      if (!is.null(cm$correlation.se)) rg_se <- mean(cm$correlation.se[ut])  # mean of pairwise SEs
+    }
+  }
+  data.table(trait = tr, model = m, llik = fm$llik,
+             converged = isTRUE(as.logical(fm$convergence)), AIC = fm$AIC, BIC = fm$BIC,
+             rg_between = rg_c, rg_se = rg_se, true_rg = true_rg_c[[tr]])
+}))
+# Extra genetic (co)variance parameters relative to M1 (1 variance), for nC countries
+nC <- length(countries)
+# M3 (r_g = 0 between countries) is NOT nested in M1 (r_g = 1): no LRT for M3
+extra_par <- c(M1_main = 0, M2_CS = 1, M3_DIAG = NA,
+               M4_US = nC * (nC + 1) / 2 - 1, M5_FA = 2 * nC - 1)
+gxe_tab[, df := extra_par[model]]
+gxe_tab[, LRT := 2 * (llik - llik[model == "M1_main"]), by = trait]
+gxe_tab[, p_LRT := ifelse(!is.na(df) & df > 0, pchisq(pmax(LRT, 0), df, lower.tail = FALSE), NA_real_)]
+gxe_tab[, rg_upper95 := rg_between + 1.96 * rg_se]
+kable(gxe_tab[order(trait, AIC)], digits = 3,
+      caption = "GxE model comparison: REML log-likelihood, LRT against M1, between-country rg with SE")
+```
+
+**Decision rule.** GxE is declared important for a trait only if, for M2, M4 or M5, **both**:
+
+1. the REML likelihood-ratio test against M1 has p < 0.05 (same fixed effects in all models,
+   so REML likelihoods are comparable; the chi-square reference is conservative because
+   variances sit on a boundary under H~0~), **and**
+2. the upper 95% limit of the between-country r~g~ (estimate + 1.96 SE) is below 0.80,
+   the threshold Robertson (1959) proposed as biologically important.
+
+Otherwise one joint evaluation across countries (the NAV approach) is retained.
+
+*Transparency note:* an earlier version of this rule used BIC plus the point estimate only.
+On the TEST control data, simulated with **no GxE** (r~g~ = 1), that rule produced a false
+positive for NUE (estimated r~g~ = 0.38, unstructured model preferred by BIC). The rule was
+tightened to the one above **after** seeing that control result and **before** any FULL-scale
+results existed. The r~g~ = 1 dataset is always analysed alongside the r~g~ = 0.9 dataset as
+the negative control.
+
+```{r gxe_decision, eval=isTRUE(params$run_gxe)}
+dec <- gxe_tab[model %in% c("M2_CS", "M4_US", "M5_FA"),
+               .(GxE_declared_REML = any(p_LRT < 0.05 & rg_upper95 < 0.80, na.rm = TRUE)), by = trait]
+kable(dec)
+```
+
+## Bayesian multi-country model (BGLR)
+
+The same GxE question in a Bayesian framework: each **country is a trait** (Falconer's
+correlated-trait view of GxE), with an **unstructured** 4 x 4 genetic covariance and the
+eigen-decomposed G. Each cow is recorded in one country only, so residual covariances
+between countries are not identifiable and the residual covariance is **diagonal**.
+Phenotypes are pre-corrected for herd x generation (nested in country); breed is a fixed effect.
+This model is cheap (G is decomposed once), so it gives all six country-pair correlations
+with posterior credible intervals.
+
+**Prior sensitivity.** With each cow in one country, between-country covariances are informed
+only through relatives, so the inverse-Wishart prior can dominate. On the TEST negative control
+(no GxE simulated), a prior centred on r~g~ = 0 produced posterior r~g~ of 0.48 (MY) and -0.04 (NUE)
+with narrow intervals, a false positive. Each trait is therefore fitted under **two opposite
+priors** with the same weight (df~0~ = number of countries + 2) and the same prior genetic
+variance (0.5 on the standardised scale):
+
+* prior A: prior mean r~g~ = 0 between countries;
+* prior B: prior mean r~g~ = 0.95 between countries.
+
+**Decision rule (Bayesian):** GxE is declared only if the upper 95% credible limit of the mean
+between-country r~g~ is below 0.80 (Robertson 1959) under **both** priors. If the two priors
+disagree, the data are reported as **uninformative** about GxE.
+
+```{r gxe_bayes, eval=isTRUE(params$run_gxe)}
+if (!exists("eigG")) eigG <- eigen(G + 1e-6 * diag(nrow(G)), symmetric = TRUE)
+if (!exists("Xb"))   Xb   <- model.matrix(~ breed, data = d)[, -1, drop = FALSE]
+thin_b <- 5
+vech_to_cor <- function(v, k) {
+  M <- matrix(0, k, k); M[lower.tri(M, diag = TRUE)] <- v      # BGLR vech: column-major lower
+  M <- M + t(M) - diag(diag(M)); cov2cor(M)
+}
+df0_b <- nC + 2
+prior_S0 <- function(r0) { V <- 0.5 * ((1 - r0) * diag(nC) + r0 * matrix(1, nC, nC)); V * (df0_b - nC - 1) }
+gxe_b <- rbindlist(lapply(params$gxe_traits, function(tr) {
+  y  <- d[[tr]] - ave(d[[tr]], d$hg)
+  Yc <- matrix(NA_real_, nrow(d), nC, dimnames = list(NULL, countries))
+  Yc[cbind(seq_len(nrow(d)), match(d$country, countries))] <- y
+  Yc <- scale(Yc)
+  rbindlist(lapply(c(A_rg0 = 0, B_rg095 = 0.95), function(r0) {
+    tmp <- tempfile("gxeb_"); dir.create(tmp)
+    fm <- Multitrait(y = Yc, ETA = list(list(X = Xb, model = "FIXED"),
+                                        list(EVD = eigG, model = "RKHS",
+                                             Cov = list(type = "UN", df0 = df0_b, S0 = prior_S0(r0)))),
+                     resCov = list(type = "DIAG"), nIter = params$mt_iter, burnIn = params$mt_burn,
+                     thin = thin_b, saveAt = paste0(tmp, "/"), verbose = FALSE)
+    S <- as.matrix(read.table(file.path(tmp, "Omega_2.dat")))
+    S <- S[seq_len(nrow(S)) * thin_b > params$mt_burn, , drop = FALSE]  # samples include burn-in
+    R <- lapply(seq_len(nrow(S)), function(k) vech_to_cor(S[k, ], nC))
+    mean_rg <- sapply(R, function(r) mean(r[upper.tri(r)]))
+    pair <- Reduce(`+`, R) / length(R)
+    progress(tr, " Bayes-GxE prior r0=", r0, " done ", format(Sys.time() - t0))
+    data.table(trait = tr, prior_mean_rg = r0, n_samples = length(mean_rg),
+               rg_mean = mean(mean_rg), rg_lower95 = quantile(mean_rg, 0.025),
+               rg_upper95 = quantile(mean_rg, 0.975),
+               min_pair_rg = min(pair[upper.tri(pair)]), max_pair_rg = max(pair[upper.tri(pair)]),
+               true_rg = true_rg_c[[tr]])
+  }))
+}))
+gxe_b[, upper_below_080 := rg_upper95 < 0.80]
+gxe_b_dec <- gxe_b[, .(GxE_declared_Bayes = all(upper_below_080),
+                       verdict = fifelse(all(upper_below_080), "GxE",
+                                 fifelse(!any(upper_below_080), "no important GxE",
+                                         "uninformative (prior-dependent)"))), by = trait]
+kable(gxe_b, digits = 3, caption = "Posterior between-country genetic correlation (mean over the 6 country pairs), by prior")
+kable(gxe_b_dec)
+```
+
+# Save
+
+```{r save}
+if (isTRUE(params$run_gxe)) {
+  fwrite(gxe_tab, file.path(params$sim_dir, "gxe_models.csv"))
+  fwrite(gxe_b,   file.path(params$sim_dir, "gxe_bayes.csv"))
+  fwrite(gxe_b_dec, file.path(params$sim_dir, "gxe_bayes_verdict.csv"))
+}
+if (isTRUE(params$run_mt)) {
+  fwrite(vc_mt,  file.path(params$sim_dir, "mt_h2.csv"))
+  fwrite(rg_tab, file.path(params$sim_dir, "mt_rg.csv"))
+  fwrite(acc_mt, file.path(params$sim_dir, "mt_accuracy.csv"))
+  saveRDS(lapply(mt, function(fm) list(SG = fm$ETA[[2]]$Cov$Omega, SR = fm$resCov$R)),
+          file.path(params$sim_dir, "mt_covariances.rds"))
+}
+cat("Run time:", format(Sys.time() - t0), "\n")
+```
+
+```{r session}
+sessionInfo()
+```
