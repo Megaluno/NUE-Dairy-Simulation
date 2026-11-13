@@ -2,7 +2,6 @@
 title: "05 - Summary: can genomic selection improve nitrogen use efficiency?"
 subtitle: "Holstein / Red Dairy Cattle / Jersey in Denmark, Sweden, Finland and Germany (simulation)"
 author: "Prepared by Emmanuel Ismaila for QGG, Aarhus University"
-date: "`r Sys.Date()`"
 output:
   html_document:
     toc: true
@@ -17,7 +16,7 @@ params:
 ---
 
 ```{r setup, include=FALSE}
-# 11 Nov 2026: kable() inside if-blocks is not printed by knitr (only the last value is); pk() prints each table.
+# kable() inside if-blocks is not printed by knitr (only the last value is); pk() prints each table.
 pk <- function(...) { print(knitr::kable(...)); cat("\n\n") }
 knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 suppressPackageStartupMessages({ library(data.table); library(ggplot2); library(knitr) })
@@ -63,8 +62,7 @@ kable(h2[, .(trait, code, HOL, RDC, JER, status, source)], caption = "Heritabili
 
 The indices use the official **NTM sub-index weights (May 2026)** for the five sub-indices that
 have a simulated counterpart (Yield = milk + protein yield with Kargo et al. 2014 economic values,
-Fertility = ICF, Udder health = SCS, Longevity, Saved Feed = SF, the NAV Saved Feed trait since
-7 Nov 2026). NTM has no weight for NUE, MUN or CH4; NUE is added at 0.35 (the Saved Feed weight) or
+Fertility = ICF, Udder health = SCS, Longevity, Saved Feed = SF, the NAV Saved Feed trait). NTM has no weight for NUE, MUN or CH4; NUE is added at 0.35 (the Saved Feed weight) or
 0.75, MUN at -0.35 on top of NUE 0.35, and CH4 on top of one NUE weight at the knee of the CH4
 weight sweep (file 00; chosen: `r ch4_sc`, CH4 weight `r idx_def[index == ch4_sc, ch4]`). Mapping and assumptions: file 00.
 
@@ -147,19 +145,19 @@ wss_h2 <- range(cv[model == "wssGBLUP", h2_REML_fit], na.rm = TRUE)
 
 **Cross-examination of the working assumption that ssGBLUP gives good EBVs.**
 
-`r arc <- "archive_rg9_2026-11-03/sim_FULL_rg1.00/cv_results_NUE.csv"; a_nue <- if (file.exists(arc)) fread(arc)[model == "ssGBLUP" & scheme == "forward"] else NULL; ord_ok <- identical(off[model == "ssGBLUP"][order(-EBV)]$breed, off[model == mods[1]][order(-TBV)]$breed); ""`
+`r arc <- "archive_rg9/sim_FULL_rg1.00/cv_results_NUE.csv"; a_nue <- if (file.exists(arc)) fread(arc)[model == "ssGBLUP" & scheme == "forward"] else NULL; ord_ok <- identical(off[model == "ssGBLUP"][order(-EBV)]$breed, off[model == mods[1]][order(-TBV)]$breed); ""`
 * *Breed-level offsets in single-step EBVs.* In this run ssGBLUP's pooled NUE accuracy in the
   youngest generation was `r f2(s_nue$acc)` (slope `r f2(s_nue$slope)`) against a within-breed
   accuracy of `r f2(s_nue$acc_wb)`, and its breed means were
   `r if (ord_ok) "in the same order as the true breed means" else paste0("not in the order of the true breed means (", jer_low, " ranked lowest)")`.
-  `r if (!is.null(a_nue)) sprintf("In the archived run with the 9-correlation matrix (1-3 Nov), the same model gave a pooled accuracy of %s against %s within breed, because it ranked the breed with the highest true mean lowest.", f2(mean(a_nue$acc_TBV)), f2(mean(a_nue$acc_within_breed))) else ""`
+  `r if (!is.null(a_nue)) sprintf("In the archived run with the 9-correlation matrix, the same model gave a pooled accuracy of %s against %s within breed, because it ranked the breed with the highest true mean lowest.", f2(mean(a_nue$acc_TBV)), f2(mean(a_nue$acc_within_breed))) else ""`
   So the breed-level part of single-step EBVs is unstable between runs. Because breed is a
   fixed effect, that part carries no information in any model, and it is consistent with the
   known incompatibility between the genomic matrix G and the pedigree matrix A~22~ (different
   bases and genetic means) in single-step evaluation (Vitezica et al. 2011, *Genet Res*
-  93:357-366). **Correction (7 Nov 2026):** an earlier version said that no adjustment was tested.
+  93:357-366). **Correction:** an earlier version said that no adjustment was tested.
   In fact `ssGBLUP` has always used G rescaled to A~22~ (a + bG, Christensen et al. 2012), pooled over
-  the three breeds. Since 7 Nov the breed-metafounder model (`ssGBLUP_MF`; Legarra et al. 2015,
+  the three breeds. The breed-metafounder model (`ssGBLUP_MF`; Legarra et al. 2015,
   *Genetics* 200:455-468) is fitted alongside it; the comparison is below.
 * *Pooled-adjusted G vs metafounders.* `r ch <- rbindlist(lapply(traits_cv, function(t) rd(sprintf("ssgblup_choice_%s.csv", t))), fill = TRUE); cp <- rd("G_A22_compatibility.csv"); if (nrow(ch)) paste0("Chosen per trait (decision rule of file 02: within-breed accuracy, ties within 1 SE broken by dispersion slope): ", paste(sprintf("%s %s (MF minus pooled %+.3f, SE %.3f)", ch$focus_traits, ch$winner, ch$mean_diff_acc_MF_minus_pooled, ch$se_diff), collapse = "; "), ".") else "Not available."`
   `r if (!is.null(cp)) sprintf("Mean gap between G and A22 relationships across breed blocks: pooled-adjusted %.3f, metafounder %.3f (absolute mean over blocks; file 02). ", mean(abs(cp$gap_pooled)), mean(abs(cp$gap_MF))) else ""`Why this matters: with pooled rescaling the between-breed blocks of G and A~22~ cannot all match at
@@ -409,7 +407,7 @@ if (nrow(reps)) {
     pair_test("GS_NTM_NUE35_OCS_dF1", "GS_NTM_NUE35", v))))
   pk(pt[, .(comparison, trait, breed, n, mean_diff, sd_diff, same_sign, p_paired)], digits = 4,
         caption = "Table A (p-values only). Paired differences between scenarios (same seed within replicate); same_sign = replicates with the majority sign; paired t-test, uncorrected")
-  # 13 Nov 2026 (my decision): correction for multiple testing. One family = all paired tests of this section.
+  # Correction for multiple testing. One family = all paired tests of this section.
   # EUR is NTM times a constant per breed (the same test), so it is not counted twice and takes the NTM values.
   fam <- pt[trait != "EUR" & !is.na(p_paired)]
   fam[, `:=`(p_BH = p.adjust(p_paired, method = "BH"), p_Bonferroni = p.adjust(p_paired, method = "bonferroni"))]
@@ -435,7 +433,7 @@ if (nrow(reps)) {
 }
 ```
 
-**Multiple testing (13 Nov 2026).** The section runs `r if (exists("n_fam")) n_fam else NA` paired tests, so about
+**Multiple testing.** The section runs `r if (exists("n_fam")) n_fam else NA` paired tests, so about
 `r if (exists("n_fam")) round(0.05 * n_fam) else NA` would fall below 0.05 by chance if no scenario differed. Three readings are given:
 
 | Method | Controls | Rule | Strength | Weakness here |
@@ -531,7 +529,7 @@ mdF <- function(s) { x <- reps[scenario == s, .(m = mean(dF)), by = breed]$m
   sprintf("%.1f%% to %.1f%%", 100 * min(x), 100 * max(x)) }
 mv <- function(s, v, d = 2) { x <- reps[scenario == s, .(m = mean(get(v))), by = breed][order(breed)]
   paste(sprintf("%s %.*f", x$breed, d, x$m), collapse = ", ") }
-# item 2: data-driven verdict on the NUE weight (added 3 Nov 2026, after the 5-replicate runs)
+# item 2: data-driven verdict on the NUE weight (after the 5-replicate runs)
 n_sig <- function(cmp, v, dir = 1) pt[comparison == cmp & trait == v & p_paired < 0.05 & sign(mean_diff) == dir, .N]
 nue35_sig <- n_sig("GS_NTM_NUE35 - GS_NTM", "NUE"); nue75_sig <- n_sig("GS_NTM_NUE75 - GS_NTM", "NUE")
 ntm_sig <- pt[grepl("^GS_NTM_NUE(35|75) - GS_NTM$", comparison) & trait == "NTM" & p_paired < 0.05, .N]
@@ -557,7 +555,7 @@ th_txt <- function(w) { x <- cmp_th[nue_weight == w][order(breed)]
    *Cross-validation (file 02):* a single-step model (pooled-adjusted or metafounder) was the best
    model or within 0.05 of the best in `r sum(ss_near$ok)` of `r nrow(ss_near)` trait x validation-scheme
    comparisons. *Inside the breeding programme (04b, 2 replicates of GS_NTM_NUE35):*
-   `r if (!is.null(mt)) paste(ifelse(is.finite(mt$eval_sec_per_gen), sprintf("%s: NTM %+.2f, NUE %+.2f, %.0f s per evaluation (x%.1f)", mt$model, mt$NTM, mt$NUE, mt$eval_sec_per_gen, mt$time_ratio_vs_SNPBLUP), sprintf("%s: could not be run (killed for exceeding the ~6.1 GB memory limit of the local machine, 8 Nov 2026)", mt$model)), collapse = "; ") else "not available"`,
+   `r if (!is.null(mt)) paste(ifelse(is.finite(mt$eval_sec_per_gen), sprintf("%s: NTM %+.2f, NUE %+.2f, %.0f s per evaluation (x%.1f)", mt$model, mt$NTM, mt$NUE, mt$eval_sec_per_gen, mt$time_ratio_vs_SNPBLUP), sprintf("%s: could not be run (killed for exceeding the ~6.1 GB memory limit of the local machine)", mt$model)), collapse = "; ") else "not available"`,
    so **`r eval_model`** was used for all replicate runs (rule: ssGBLUP only if higher NTM and
    not lower NUE response at no more than twice the run time). For routine evaluation the single-step
    family remains the standard because it uses cows that have CFIT records but no genotypes; within

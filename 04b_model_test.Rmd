@@ -1,7 +1,6 @@
 ---
 title: "04b - Evaluation model test inside the breeding programme: SNP-BLUP vs ssGBLUP"
 author: "Prepared by Emmanuel Ismaila for QGG, Aarhus University"
-date: "`r Sys.Date()`"
 output:
   html_document:
     toc: true
@@ -20,7 +19,7 @@ library(data.table); library(knitr)
 
 # Question and decision rule
 
-Aim (7 Nov 2026): run SNP-BLUP and ssGBLUP on the same 2 replicates of `r params$scenario`,
+Aim: run SNP-BLUP and ssGBLUP on the same 2 replicates of `r params$scenario`,
 compare genetic response (NTM, NUE) and run time, and use the winner for all 20-replicate runs:
 "higher response without demanding much larger run time".
 
@@ -59,7 +58,7 @@ one_safe <- function(dir, r, m) tryCatch(one(dir, r, m), error = function(e)
   data.table(replicate = r, model = m, NTM = NA_real_, NUE = NA_real_, eval_sec_per_gen = Inf))
 res <- rbindlist(unlist(lapply(seq_along(params$sim_dirs), function(k)
   lapply(c("SNPBLUP", "ssGBLUP"), function(m) one_safe(params$sim_dirs[k], params$rep_ids[k], m))), recursive = FALSE))
-# 8 Nov 2026: on the 7 GB machine the ssGBLUP runs were killed for exceeding memory (about 6.1 GB per
+# On the 7 GB machine the ssGBLUP runs were killed for exceeding memory (about 6.1 GB per
 # process) in the first generation's evaluation, not for time; see logs/<step>.log and the README.
 if (any(!is.finite(res$eval_sec_per_gen))) cat("Runs without output (did not finish within the step time or memory limit):",
   paste(res[!is.finite(eval_sec_per_gen), paste(model, "replicate", replicate)], collapse = "; "), "\n")

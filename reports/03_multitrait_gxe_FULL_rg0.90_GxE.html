@@ -1605,7 +1605,6 @@ border-radius: 0px;
 <h1 class="title toc-ignore">03 - Multi-trait Bayesian models (Diagonal,
 Unstructured, Factor-analytic) and GxE</h1>
 <h4 class="author">Prepared by Emmanuel Ismaila for QGG, Aarhus University</h4>
-<h4 class="date">2026-11-09</h4>
 
 </div>
 
@@ -1839,16 +1838,16 @@ across countries</strong> (via G).</p>
 <p>Residual variance is heterogeneous by country in every model
 (<code>dsm(country)</code>), as in the NAV yield model (NAV May 2024,
 Section 4). Fixed effects: breed + herd x generation; because herds are
-single-breed (7 Nov 2026), breed is contained in herd x generation and
+single-breed, breed is contained in herd x generation and
 is dropped (same rule as file 02).</p>
 <p><strong>THI reaction norm:</strong> not run yet. Temperature-humidity
 index series for the four countries have not been sourced (see the open
 items in file 00).</p>
 <pre class="r"><code># Realised between-country genetic correlation in the simulation (truth)
-# 8 Nov 2026 (memory): genetic values per saved generation, stacked; same rows as gv() of the merged population
+# Memory: genetic values per saved generation, stacked; same rows as gv() of the merged population
 GV &lt;- do.call(rbind, lapply(unname(st$kept_cows), function(p) { g &lt;- gv(p); rownames(g) &lt;- p@id; g }))
 GV &lt;- GV[gid, , drop = FALSE]
-st$pop &lt;- NULL; st$kept_cows &lt;- NULL; invisible(gc())   # 8 Nov 2026: free the genomes (7 GB machine); not used below
+st$pop &lt;- NULL; st$kept_cows &lt;- NULL; invisible(gc())   # free the genomes (7 GB machine); not used below
 countries &lt;- unique(fread(&quot;params/breed_country_split.csv&quot;)$country)
 if (st$gxe_rg &lt; 1) {
   true_rg_c &lt;- sapply(params$gxe_traits, function(tr) {
@@ -1871,7 +1870,7 @@ ctl &lt;- mmes_control(convergence = list(maxIters = as.integer(params$gxe_reml_
                     diagnostics = list(verbose = FALSE))
 fit_gxe &lt;- function(tr, form) {
   dg$y &lt;- dg[[tr]]
-  # herds are single-breed (7 Nov 2026), so breed is nested in herd-generation and breed + hg is
+  # herds are single-breed, so breed is nested in herd-generation and breed + hg is
   # rank deficient; same rule as file 02 (fixed_formula): drop breed when hg already contains it
   fx &lt;- if (all(as.data.table(dg)[, uniqueN(breed), by = hg]$V1 == 1)) y ~ hg else y ~ breed + hg
   tryCatch(mmes(fx, random = form,

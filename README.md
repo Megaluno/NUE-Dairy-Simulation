@@ -83,7 +83,7 @@ Each step is one R Markdown file and a self-contained HTML report (in [`reports/
 - **Heritabilities** are breed-specific where published: yield and fertility from the NAV routine evaluation (May 2024); MUN from Buitenhuis & Poulsen (2023); NUE 0.13 from Chen et al. (2021); CH4 0.175 from Schneider et al. (2025); Saved Feed 0.23 from Lidauer et al. (2023).
 - **Genetic correlations**: 40 of 55 trait pairs have a published source. Rules: index-based values only from Nordic breeds, genuine estimates from European studies, recent over old. Evidence for every pair is in [`results/rg_evidence.xlsx`](results/rg_evidence.xlsx).
 - **Unsourced pairs** take the values implied by *weighted bending* (Jorjani et al. 2003), which makes the matrix positive definite while moving published values by at most about 0.015. These values are not estimates.
-- **NUE correlations** (milk 0.52, protein 0.80, MUN -0.12) all come from one study of grazing Irish cows (Tavernier et al. 2024). This was my weakest input, so I conducted a sensitivity analysis to confirm its influence.
+- **NUE correlations** (milk 0.52, protein 0.80, MUN -0.12) all come from one study of grazing Irish cows (Tavernier et al. 2024). This is the weakest input, so a sensitivity analysis tests its influence.
 - **Breeding goal**: NTM sub-index weights (May 2026) for the sub-indices that have a simulated trait (64% of NTM weight for HOL and RDC, 72% for JER). NUE has no published economic value, so weights of 0.35 (equal to Saved Feed) and 0.75 are tested.
 
 **Writes** `params/*.csv` and `params/RG_matrix.rds`.
@@ -228,7 +228,7 @@ Rscript -e "rmarkdown::render('00_genetic_parameters.Rmd')"
 Rscript -e "rmarkdown::render('01_founders_burnin.Rmd', params = list(run_mode = 'TEST'))"
 
 # The full run reported here (144 steps, resumable; each step leaves logs/<step>.done)
-./queue.sh queue_8nov.txt
+./queue.sh queue_full_run.txt
 
 # Rebuild the spreadsheet of replicate results
 python3 tools/build_xlsx.py
@@ -246,7 +246,7 @@ results/     result tables of every replicate and sensitivity set (CSV), two wor
 tools/       scripts that build the workbooks
 hpc/         cluster version (50k SNP, 20 replicates)
 docs/        assumptions and verification log
-queue.sh, run_step.sh, queue_8nov.txt   resumable run queue
+queue.sh, run_step.sh, queue_full_run.txt   resumable run queue
 ```
 
 Large simulation state files (`*.rds` genomes, phenotype and pedigree files) are not stored; the code regenerates them from the seeds.

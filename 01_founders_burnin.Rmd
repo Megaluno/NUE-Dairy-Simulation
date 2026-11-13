@@ -1,7 +1,6 @@
 ---
 title: "01 - Coalescent founders, 3 breeds x 4 countries, phenotypic burn-in"
 author: "Prepared by Emmanuel Ismaila for QGG, Aarhus University"
-date: "`r Sys.Date()`"
 output:
   html_document:
     toc: true
@@ -13,8 +12,8 @@ params:
   gxe_rg: 1.0           # between-country genetic correlation: 1.0 (NAV assumption) or 0.9 (sensitivity)
   seed: 20261031
   param_set: "main"     # parameter set: "main"; NUE sensitivity "NUEx0" / "NUEx05" (correlations); "SFh008" (Saved Feed h2 0.08)
-  rep_id: 0             # founder-population replicate (7 Nov 2026): seed = seed + rep_id; output folder gets _rep<r> for r > 0
-  founders_only: FALSE  # TRUE = run only the MaCS founder step and cache it (8 Nov 2026: splits the work into two steps that each fit the 2-hour run window)
+  rep_id: 0             # founder-population replicate: seed = seed + rep_id; output folder gets _rep<r> for r > 0
+  founders_only: FALSE  # TRUE = run only the MaCS founder step and cache it (splits the work into two steps that each fit the 2-hour run window)
 ---
 
 ```{r setup, include=FALSE}
@@ -51,7 +50,7 @@ traits    <- h2$code
 nT        <- length(traits)
 breeds    <- c("HOL", "RDC", "JER")
 countries <- unique(split$country)            # DNK, SWE, FIN, DEU (file 00)
-herds_tab <- fread("params/herds.csv")       # 40 single-breed herds per breed x country (file 00, 7 Nov 2026)
+herds_tab <- fread("params/herds.csv")       # 40 single-breed herds per breed x country (file 00)
 nC        <- length(countries)
 kable(h2[, .(code, HOL, RDC, JER, status)])
 ```
@@ -65,7 +64,7 @@ FULL <- params$run_mode == "FULL"
 design <- list(
   n_founder_per_breed = if (FULL) 600 else 150,   # founder individuals per breed from MaCS
   scale               = if (FULL) 1 else 0.05,    # TEST mode = 5% of 28,400 cows
-  n_chr               = 29,                       # bovine autosomes (7 Nov 2026; was 10)
+  n_chr               = 29,                       # bovine autosomes (was 10)
   seg_sites_per_chr   = 2500,                     # candidate segregating sites kept per chr (>= SNP + QTL)
   snp_per_chr         = 345,                      # 29 x 345 = 10,005 SNP (50k planned for the cluster; was 10 x 500)
   qtl_per_chr         = 100,                      # 2,900 QTL per trait, non-overlapping with SNP
@@ -113,7 +112,7 @@ cmd <- paste(
   "-ej", design$split_gen_JER     / (4 * Ne) + 1e-6, "3 1")
 cat(cmd, "\n")
 
-# Founder cache (8 Nov 2026). The founders depend only on the seed (seed + rep_id) and the MaCS
+# Founder cache. The founders depend only on the seed (seed + rep_id) and the MaCS
 # settings, and nothing random happens before this chunk. So every burn-in with the same rep_id
 # (main, rg 0.9, NUEx0, NUEx05, SFh008) already drew identical founders; the cache only avoids
 # re-running MaCS. The RNG state after MaCS is stored with the founders and restored, so a cached
@@ -201,7 +200,7 @@ With a published between-breed F~ST~, the split times can be tuned to match it.
 # Population structure, blocking and phenotypes
 
 Each cow belongs to a **breed** (factor), a **country** (factor) and a **herd** (block nested
-in breed x country). Since 7 Nov 2026 herds are **single-breed**, as on the CFIT farms (40 herds, file 00), and cows go to countries in the CFIT proportions of their breed. Herd effects are redrawn every generation
+in breed x country). Herds are **single-breed**, as on the CFIT farms (40 herds, file 00), and cows go to countries in the CFIT proportions of their breed. Herd effects are redrawn every generation
 (herd-generation). Phenotype = genetic value for the cow's country + herd effect + residual.
 Residual variance is set **per breed** so that h^2^ in the base generation equals the
 breed-specific value from file 00.

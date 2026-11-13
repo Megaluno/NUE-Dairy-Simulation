@@ -2,7 +2,6 @@
 title: "02 - Dosage matrix, G/A/H kernels, and cross-validated genomic prediction"
 subtitle: "ABLUP-REML, GBLUP, ssGBLUP, weighted ssGBLUP, rrBLUP, BayesA, BayesB"
 author: "Prepared by Emmanuel Ismaila for QGG, Aarhus University"
-date: "`r Sys.Date()`"
 output:
   html_document:
     toc: true
@@ -14,7 +13,7 @@ params:
   n_geno_per_gen: 300            # genotyped cows per generation (gen 8, 9, 10); FULL default 1000
   n_nongeno: 600                 # phenotyped, NOT genotyped cows (gen 8-9) for single-step; FULL 3000
   ped_depth: 4                   # generations of ancestors kept in the pedigree
-  focus_traits: ["NUE", "MUN", "SF"]     # SF (Saved Feed) replaced DMI on 7 Nov 2026
+  focus_traits: ["NUE", "MUN", "SF"]     # SF (Saved Feed) replaced DMI
   n_folds: 5
   bayes_iter: 6000
   bayes_burn: 1000
@@ -53,7 +52,7 @@ Everything here is computed from that simulation; nothing is typed in by hand.
 | BayesB | point-mass + scaled-t | **SNP effects** | MCMC (BGLR) |
 
 Fixed effects in every model: **breed** (factor) + **herd x generation** (block; herd effects
-were redrawn every generation in file 01, and herds are nested in country). Since 7 Nov 2026 the
+were redrawn every generation in file 01, and herds are nested in country). The
 herds are single-breed (CFIT farms, file 00), so herd x generation also identifies the breed; the
 breed term is then dropped as redundant (same fit, full-rank design).
 
@@ -104,7 +103,7 @@ Three codings are used below, and they are algebraically equivalent for predicti
 * `Z = M - 2p`: centred by allele frequency (VanRaden 2008, method 1).
 
 ```{r dosage}
-# 8 Nov 2026 (memory, 7 GB machine): subset every saved generation to the sampled cows BEFORE merging,
+# Memory, 7 GB machine: subset every saved generation to the sampled cows BEFORE merging,
 # and drop the last-generation population that this file does not use. Same cows, same order as before.
 st$pop <- NULL
 gid <- as.character(geno_ids)
@@ -214,7 +213,7 @@ cat("H^-1 dimension:", nrow(Hinv), "| cor(offdiag G, offdiag A22):",
 progress("Hinv built: ", format(Sys.time() - t0))
 ```
 
-**Correction to the record (7 Nov 2026).** An earlier text said that no adjustment of G to A~22~ was
+**Correction to the record.** An earlier text said that no adjustment of G to A~22~ was
 tested. That was wrong: the `tune_G()` step above has always rescaled G as a + bG to the mean
 diagonal and mean of A~22~ (Christensen et al. 2012, *Animal* 6:1565; same idea as Vitezica et al.
 2011, *Genet Res* 93:357). It does this **once for all three breeds pooled**. What had not been
@@ -584,7 +583,7 @@ ggplot(res[model != "GBLUP_snp" & scheme != "forward"],
 
 Both single-step models use the same data, pedigree and REML. They differ only in how the genomic and
 pedigree relationships are made compatible: pooled a + bG rescaling (`ssGBLUP`) versus breed
-metafounders (`ssGBLUP_MF`). **Decision rule (mine, fixed before seeing the result):**
+metafounders (`ssGBLUP_MF`). **Decision rule (fixed before seeing the result):**
 
 1. Primary criterion: mean **within-breed accuracy** over all focus traits and validation sets, because
    selection in file 04 is within breed.
@@ -621,7 +620,7 @@ fwrite(data.table(winner = winner, reason = reason, mean_diff_acc_MF_minus_poole
 
 Expected accuracy from Daetwyler et al. (2008, *PLoS ONE* 3:e3395),
 r = sqrt(N h^2^ / (N h^2^ + M~e~)), with M~e~ = 2 N~e~ L / log(4 N~e~ L) (Goddard 2009, *Genetica*).
-N~e~ = 90 (CATTLE history), L = genome length in Morgans of the simulated chromosomes (29 since 7 Nov 2026).
+N~e~ = 90 (CATTLE history), L = genome length in Morgans of the simulated chromosomes (29).
 This formula assumes one homogeneous population, so it is only a rough reference here.
 
 ```{r theory}

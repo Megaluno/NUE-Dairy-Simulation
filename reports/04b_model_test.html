@@ -11,7 +11,6 @@
 
 <meta name="author" content="Prepared by Emmanuel Ismaila for QGG, Aarhus University" />
 
-<meta name="date" content="2026-11-08" />
 
 <title>04b - Evaluation model test inside the breeding programme: SNP-BLUP vs ssGBLUP</title>
 
@@ -480,8 +479,8 @@ display: none;
 
 <h1 class="title toc-ignore">04b - Evaluation model test inside the
 breeding programme: SNP-BLUP vs ssGBLUP</h1>
-<h4 class="author">Prepared by Emmanuel Ismaila for QGG, Aarhus University</h4>
-<h4 class="date">2026-11-08</h4>
+<h4 class="author">Prepared by Emmanuel Ismaila for QGG, Aarhus
+University</h4>
 
 </div>
 
@@ -494,12 +493,12 @@ breeding programme: SNP-BLUP vs ssGBLUP</h1>
 
 <div id="question-and-decision-rule" class="section level1">
 <h1>Question and decision rule</h1>
-<p>Aim (7 Nov 2026): run SNP-BLUP and ssGBLUP on the same 2
-replicates of GS_NTM_NUE35, compare genetic response (NTM, NUE) and run
-time, and use the winner for all 20-replicate runs: “higher response
-without demanding much larger run time”.</p>
-<p><strong>Rule (fixed before the runs; my operationalisation of my
-wording):</strong> ssGBLUP is used for all runs only if
+<p>Aim: run SNP-BLUP and ssGBLUP on the same 2 replicates of
+GS_NTM_NUE35, compare genetic response (NTM, NUE) and run time, and use
+the winner for all 20-replicate runs: “higher response without demanding
+much larger run time”.</p>
+<p><strong>Rule (fixed before the runs; operational form of the
+aim):</strong> ssGBLUP is used for all runs only if
 <strong>both</strong></p>
 <ol style="list-style-type: decimal">
 <li>its mean response over the 2 replicates is higher than SNP-BLUP for
@@ -536,7 +535,7 @@ one_safe &lt;- function(dir, r, m) tryCatch(one(dir, r, m), error = function(e)
   data.table(replicate = r, model = m, NTM = NA_real_, NUE = NA_real_, eval_sec_per_gen = Inf))
 res &lt;- rbindlist(unlist(lapply(seq_along(params$sim_dirs), function(k)
   lapply(c(&quot;SNPBLUP&quot;, &quot;ssGBLUP&quot;), function(m) one_safe(params$sim_dirs[k], params$rep_ids[k], m))), recursive = FALSE))
-# 8 Nov 2026: on the 7 GB machine the ssGBLUP runs were killed for exceeding memory (about 6.1 GB per
+# On the 7 GB machine the ssGBLUP runs were killed for exceeding memory (about 6.1 GB per
 # process) in the first generation&#39;s evaluation, not for time; see logs/&lt;step&gt;.log and the README.
 if (any(!is.finite(res$eval_sec_per_gen))) cat(&quot;Runs without output (did not finish within the step time or memory limit):&quot;,
   paste(res[!is.finite(eval_sec_per_gen), paste(model, &quot;replicate&quot;, replicate)], collapse = &quot;; &quot;), &quot;\n&quot;)</code></pre>

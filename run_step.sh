@@ -2,7 +2,7 @@
 # Runs one named pipeline step; writes logs/<step>.log and logs/<step>.done on success.
 cd "$(dirname "$0")"
 export OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=1
-# 8 Nov 2026: return freed memory to the system (glibc otherwise keeps it; the step was killed at ~6 GB
+# Return freed memory to the system (glibc otherwise keeps it; the step was killed at ~6 GB
 # resident while R itself used under 3 GB). Large blocks are mmap-ed and released when R frees them.
 export MALLOC_ARENA_MAX=2 MALLOC_MMAP_THRESHOLD_=131072 MALLOC_TRIM_THRESHOLD_=131072
 step=$1; shift

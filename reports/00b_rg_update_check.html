@@ -9,10 +9,10 @@
 <meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
 
 
+<meta name="author" content="Prepared by Emmanuel Ismaila for QGG, Aarhus University" />
 
-<meta name="date" content="2026-11-08" />
 
-<title>00b - Update check: Saved Feed replaces feeding rate and DMI; CFIT population (7 Nov 2026)</title>
+<title>00b - Update check: Saved Feed replaces feeding rate and DMI; CFIT population</title>
 
 <script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
 // be compatible with the behavior of Pandoc < 2.8).
@@ -478,9 +478,9 @@ display: none;
 
 
 <h1 class="title toc-ignore">00b - Update check: Saved Feed replaces
-feeding rate and DMI; CFIT population (7 Nov 2026)</h1>
-<h4 class="author">Prepared by Emmanuel Ismaila for QGG, Aarhus University</h4>
-<h4 class="date">2026-11-08</h4>
+feeding rate and DMI; CFIT population</h1>
+<h4 class="author">Prepared by Emmanuel Ismaila for QGG, Aarhus
+University</h4>
 
 </div>
 
@@ -503,13 +503,13 @@ theory: what the change does to NTM selection</a></li>
 <div id="purpose" class="section level1">
 <h1>Purpose</h1>
 <p>This file <strong>does not change the pipeline</strong>. It compares
-the parameter set written by <code>00_genetic_parameters.Rmd</code> (7
-Nov 2026) with the previous one (archived in
-<code>archive_rg28_2026-11-05/params/</code>, used for the runs of 5 Nov
-2026), so every change is visible before files 01-05 are re-run. The
-previous version of this file (resilience QR vs MA and Saved Feed as raw
-vs production-corrected DMI, 4 Nov) is in the same archive folder.</p>
-<p>Changes made on 7 Nov 2026, all by my decision:</p>
+the parameter set written by <code>00_genetic_parameters.Rmd</code> with
+the previous one (archived in <code>archive_rg28/params/</code>, used
+for the earlier runs), so every change is visible before files 01-05 are
+re-run. The previous version of this file (resilience QR vs MA and Saved
+Feed as raw vs production-corrected DMI) is in the same archive
+folder.</p>
+<p>Changes made:</p>
 <ol style="list-style-type: decimal">
 <li>Feeding rate (FR) is replaced by <strong>Saved Feed (SF)</strong>;
 DMI is dropped; ECM and body weight are not added as traits.</li>
@@ -520,7 +520,7 @@ correlations (NAV 2026 note, Table 4), cow-weighted over breeds.</li>
 28,400 cows; 40 single-breed herds (largest-remainder rounding of 39
 farms scaled to 40).</li>
 </ol>
-<pre class="r"><code>old_dir &lt;- &quot;archive_rg28_2026-11-05/params&quot;; new_dir &lt;- &quot;params&quot;
+<pre class="r"><code>old_dir &lt;- &quot;archive_rg28/params&quot;; new_dir &lt;- &quot;params&quot;
 h2_old &lt;- fread(file.path(old_dir, &quot;h2.csv&quot;)); h2_new &lt;- fread(file.path(new_dir, &quot;h2.csv&quot;))
 RG_old &lt;- readRDS(file.path(old_dir, &quot;RG_matrix.rds&quot;)); RG_new &lt;- readRDS(file.path(new_dir, &quot;RG_matrix.rds&quot;))
 src_old &lt;- fread(file.path(old_dir, &quot;rg_sourced.csv&quot;)); src_new &lt;- fread(file.path(new_dir, &quot;rg_sourced.csv&quot;))
@@ -532,9 +532,9 @@ hd_old &lt;- fread(file.path(old_dir, &quot;herds.csv&quot;)); hd_new &lt;- frea
 <h1>Trait set and heritabilities</h1>
 <pre class="r"><code>tr &lt;- data.table(trait = union(h2_old$code, h2_new$code))
 tr[, `:=`(before = trait %in% h2_old$code, now = trait %in% h2_new$code)]
-kable(tr, caption = &quot;Traits before (5 Nov) and now (7 Nov)&quot;)</code></pre>
+kable(tr, caption = &quot;Traits before and now&quot;)</code></pre>
 <table>
-<caption>Traits before (5 Nov) and now (7 Nov)</caption>
+<caption>Traits before and now</caption>
 <thead>
 <tr class="header">
 <th align="left">trait</th>
@@ -752,10 +752,10 @@ set)</caption>
 <h1>Population and herds</h1>
 <pre class="r"><code>pop &lt;- merge(sp_old[, .(cows_old = sum(n)), by = .(breed, country)],
              sp_new[, .(cows_new = sum(n), herds_new = sum(farms)), by = .(breed, country)], by = c(&quot;breed&quot;, &quot;country&quot;), all = TRUE)
-kable(pop, caption = &quot;Cows per breed x country before (ICAR 2026 abstract, equal split) and now (CFIT slides, my rule)&quot;)</code></pre>
+kable(pop, caption = &quot;Cows per breed x country before (ICAR 2026 abstract, equal split) and now (CFIT slides, equal-split rule)&quot;)</code></pre>
 <table>
 <caption>Cows per breed x country before (ICAR 2026 abstract, equal
-split) and now (CFIT slides, my rule)</caption>
+split) and now (CFIT slides, equal-split rule)</caption>
 <thead>
 <tr class="header">
 <th align="left">breed</th>
@@ -1071,9 +1071,9 @@ Saved in NTM’, Table 3 (bull calves born 2017)</td>
 calves: Stephansen et al. (2025, Interbull Bull 61, Table 2; bulls born
 2022) and the NAV note <em>Economic weight of Saved feed in NTM</em>
 (2026, Table 4; bulls born 2022-2024). File 00 uses the NAV 2026 note
-(recent over old, my rule). The table shows how much the choice
-matters, with the same CFIT cow weights and the same sign reversals
-(Fertility and Udder health/Mastitis reversed into ICF and SCS).</p>
+(recent over old). The table shows how much the choice matters, with the
+same CFIT cow weights and the same sign reversals (Fertility and Udder
+health/Mastitis reversed into ICF and SCS).</p>
 <pre class="r"><code>n_breed &lt;- sp_new[, .(n = sum(n)), by = breed][, setNames(n, breed)]
 w &lt;- function(h, r, j) sum(n_breed[c(&quot;HOL&quot;, &quot;RDC&quot;, &quot;JER&quot;)] * c(h, r, j)) / sum(n_breed)
 # the NAV Yield index correlation is applied to both MY and PY

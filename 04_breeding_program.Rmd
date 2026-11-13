@@ -1,7 +1,6 @@
 ---
 title: "04 - Genomic selection program, breeder's equation, index and mating plan"
 author: "Prepared by Emmanuel Ismaila for QGG, Aarhus University"
-date: "`r Sys.Date()`"
 output:
   html_document:
     toc: true
@@ -58,7 +57,7 @@ for `r params$n_gs_gen` generations **from the same starting population**:
 
 The two NUE indices differ from GS_NTM **only in the NUE weight**, so differences in any
 trait are attributable to that one weight. The earlier illustrative indices (GS_PROD, GS_NUE,
-GS_NUE_noMUN; superseded 3 Nov 2026) are in `archive_illustrative_index/`.
+GS_NUE_noMUN; superseded) are in `archive_illustrative_index/`.
 
 Genomic EBVs come from **SNP effects** (SNP-BLUP), so EBV = Σ dosage x marker effect.
 Training is strictly forward: calves are selected before their own (or sisters') CFIT
@@ -71,10 +70,10 @@ stream start for every scenario within a replicate, so scenarios are compared **
 
 ```{r load}
 st <- readRDS(file.path(params$sim_dir, "burnin_state.rds")); SP <- st$SP
-# 8 Nov 2026 (memory): only the last two burn-in generations of cows are used below (training set)
+# Memory: only the last two burn-in generations of cows are used below (training set)
 st$kept_cows <- st$kept_cows[as.integer(sub(" .*", "", names(st$kept_cows))) >= max(as.integer(sub(" .*", "", names(st$kept_cows)))) - 1]
 invisible(gc())
-memlog <- function(tag) progress(params$scenarios[1], " ", tag, " | R memory in use (MB): ", round(sum(gc()[, 2])))   # 8 Nov 2026
+memlog <- function(tag) progress(params$scenarios[1], " ", tag, " | R memory in use (MB): ", round(sum(gc()[, 2])))
 memlog("state loaded")
 phen0 <- fread(file.path(params$sim_dir, "phenotypes.csv"))
 phen0 <- phen0[generation >= max(generation) - 1]          # only the last two burn-in generations are used
@@ -126,7 +125,7 @@ round(sdA0, 3)
 
 # Simulation functions
 
-`make_pheno()` and `assign_blocks()` are identical to file 01 (single-breed herds since 7 Nov 2026;
+`make_pheno()` and `assign_blocks()` are identical to file 01 (single-breed herds;
 herd-generation effects; breed-specific residual variance fixed at burn-in values).
 
 ```{r fns}
@@ -191,7 +190,7 @@ snp_blup <- function(Mtr, Ytr, Xdf) {
   # dual (n x n) form, exact for ridge regression: (W'W + lam I)^-1 W'y = W'(WW' + lam I)^-1 y,
   # here with fixed effects absorbed, Ws = P W. With ~50k SNP and ~6k cows this needs one n x n
   # eigen-decomposition instead of a 50k x 50k one.
-  # 8 Nov 2026 (memory, 7 GB machine): Ws is never formed. Ws Ws' = P (W W') P, with W W' summed
+  # Memory, 7 GB machine: Ws is never formed. Ws Ws' = P (W W') P, with W W' summed
   # over blocks of SNP, and Ws' z = W' (P z). Same algebra as before, so the same SNP effects
   # (up to floating-point rounding).
   K <- matrix(0, nrow(Mtr), nrow(Mtr))
@@ -210,7 +209,7 @@ snp_blup <- function(Mtr, Ytr, Xdf) {
 }
 ```
 
-## ssGBLUP alternative (model test, 7 Nov 2026)
+## ssGBLUP alternative (model test)
 
 The aim was to test SNP-BLUP against ssGBLUP inside the breeding programme and keep the one with the
 higher response that does not need a much longer run time. The single-step version here uses the
@@ -394,12 +393,12 @@ for (sc in scen) {
   lab <- if (is_ocs(sc) && params$ocs_dF != 0.005) sprintf("%s_dF%g", sc, 100 * params$ocs_dF) else sc
   set.seed(params$seed + params$rep_id)     # same random stream start for every scenario within a replicate
   cur <- st$pop; hist_cows <- list(); prev_idx <- list(); C_star <- list()
-  # 8 Nov 2026 (memory, 7 GB machine): the genomes of past cows are kept on disk (uncompressed, in the
+  # Memory, 7 GB machine: the genomes of past cows are kept on disk (uncompressed, in the
   # R session's temporary folder) and read back only for the training set; phenotypes and herd blocks
   # stay in memory. The same cows are read back, so results are unchanged.
   hist_dir <- tempfile("hist_"); dir.create(hist_dir)
-  if (length(scen) == 1) st$pop <- NULL   # 8 Nov 2026 (memory): one scenario per run, the start population is not needed again
-  # 9 Nov 2026 (memory): PHENO has no genomic evaluation, so the burn-in cows (training set of the GS
+  if (length(scen) == 1) st$pop <- NULL   # Memory: one scenario per run, the start population is not needed again
+  # Memory: PHENO has no genomic evaluation, so the burn-in cows (training set of the GS
   # scenarios) are never used; they were freed only inside the GS branch and PHENO was killed (out of memory).
   if (length(scen) == 1 && sc == "PHENO") { st$kept_cows <- NULL; invisible(gc()) }
   ped_all <- copy(ped0); ped_new <- list()
@@ -411,7 +410,7 @@ for (sc in scen) {
     tr_keys <- names(hist_cows)[as.integer(sub(" .*", "", names(hist_cows))) %in% (g - 2):(g - 1)]
     if (!length(tr_keys)) {                          # first GS generation: burn-in cows
       trn <- phen0[generation %in% (burn_end - 1):burn_end]
-      # 8 Nov 2026 (memory, 7 GB machine): the id order of the merged population is taken from the id
+      # Memory, 7 GB machine: the id order of the merged population is taken from the id
       # vectors, and each generation is subset to the sampled cows before merging. Same sample, same order.
       kp <- unname(st$kept_cows[paste(c(burn_end - 1, burn_end), rep(breeds, each = 2))])
       ids <- intersect(as.character(trn$id), unlist(lapply(kp, function(p) p@id)))
@@ -430,11 +429,11 @@ for (sc in scen) {
       trn <- rbindlist(parts)
       take <- sample(nrow(trn), min(nrow(trn), params$n_train_total))
       trn_ng <- trn[-take]; trn <- trn[take]
-      trpop <- do.call(c, lapply(tr_keys, function(k) { hp <- readRDS(hist_cows[[k]]$file); hp[hp@id %in% trn$id] }))   # 8 Nov 2026: subset before merging (memory); match() below fixes the order
+      trpop <- do.call(c, lapply(tr_keys, function(k) { hp <- readRDS(hist_cows[[k]]$file); hp[hp@id %in% trn$id] }))   # subset before merging (memory); match() below fixes the order
       Mtr <- pullSnpGeno(trpop[match(trn$id, trpop@id)], simParam = SP)   # subset first (memory)
       Ytr <- as.matrix(trn[, ..traits]); Xdf <- trn[, .(breed, bg, hg)]
     }
-    rm(trpop); if (length(scen) == 1) st$kept_cows <- NULL; invisible(gc())   # 8 Nov 2026: free genomes before the evaluation (memory)
+    rm(trpop); if (length(scen) == 1) st$kept_cows <- NULL; invisible(gc())   # free genomes before the evaluation (memory)
     memlog(paste("gen", g, "training matrix ready"))
     t_ev <- Sys.time()
     if (eval_model == "ssGBLUP") {
@@ -555,7 +554,7 @@ for (sc in scen) {
       F_g <- genomic_F(nxt[[b]])
       log_F[[paste(lab, g, b)]] <- data.table(scenario = lab, generation = gen + 1, breed = b,
                                              F_genomic = mean(F_g), expected_F = expF)
-      # 8 Nov 2026 (memory): this breed's parent generation is no longer needed (its cows stay in hist_cows)
+      # Memory: this breed's parent generation is no longer needed (its cows stay in hist_cows)
       cur[b] <- list(NULL); rm(pop, cows, bulls, dams, elite, sires); invisible(gc())
     }
     cur <- nxt

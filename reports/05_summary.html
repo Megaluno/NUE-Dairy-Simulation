@@ -11,7 +11,6 @@
 
 <meta name="author" content="Prepared by Emmanuel Ismaila for QGG, Aarhus University" />
 
-<meta name="date" content="2026-11-14" />
 
 <title>05 - Summary: can genomic selection improve nitrogen use efficiency?</title>
 
@@ -1608,7 +1607,6 @@ nitrogen use efficiency?</h1>
 Sweden, Finland and Germany (simulation)</h3>
 <h4 class="author">Prepared by Emmanuel Ismaila for QGG, Aarhus
 University</h4>
-<h4 class="date">2026-11-14</h4>
 
 </div>
 
@@ -1645,13 +1643,13 @@ kable(h2[, .(trait, code, HOL, RDC, JER, status, source)], caption = &quot;Herit
 <table style="width:100%;">
 <caption>Heritabilities and their sources</caption>
 <colgroup>
-<col width="30%" />
+<col width="25%" />
 <col width="2%" />
 <col width="2%" />
 <col width="2%" />
 <col width="2%" />
-<col width="26%" />
-<col width="34%" />
+<col width="28%" />
+<col width="36%" />
 </colgroup>
 <thead>
 <tr class="header">
@@ -1771,7 +1769,7 @@ Table 2 (PP 0.19 SE 0.03; MLP 0.16 SE 0.02)</td>
 </tr>
 <tr class="odd">
 <td align="left">305-d fat yield, 1st lactation (completes the NTM Yield
-sub-index; added 7 Nov 2026)</td>
+sub-index)</td>
 <td align="left">FY</td>
 <td align="right">0.360</td>
 <td align="right">0.340</td>
@@ -1790,11 +1788,11 @@ weights and the expected price of NUE (file 00)</h1>
 2026)</strong> for the five sub-indices that have a simulated
 counterpart (Yield = milk + protein yield with Kargo et al. 2014
 economic values, Fertility = ICF, Udder health = SCS, Longevity, Saved
-Feed = SF, the NAV Saved Feed trait since 7 Nov 2026). NTM has no weight
-for NUE, MUN or CH4; NUE is added at 0.35 (the Saved Feed weight) or
-0.75, MUN at -0.35 on top of NUE 0.35, and CH4 on top of one NUE weight
-at the knee of the CH4 weight sweep (file 00; chosen: GS_NTM_NUE75_CH4,
-CH4 weight -0.5). Mapping and assumptions: file 00.</p>
+Feed = SF, the NAV Saved Feed trait). NTM has no weight for NUE, MUN or
+CH4; NUE is added at 0.35 (the Saved Feed weight) or 0.75, MUN at -0.35
+on top of NUE 0.35, and CH4 on top of one NUE weight at the knee of the
+CH4 weight sweep (file 00; chosen: GS_NTM_NUE75_CH4, CH4 weight -0.5).
+Mapping and assumptions: file 00.</p>
 <pre class="r"><code>kable(dcast(iw[weight != 0 | trait %in% c(&quot;NUE&quot;, &quot;MUN&quot;, &quot;CH4&quot;)], trait ~ index + breed, value.var = &quot;weight&quot;), digits = 3,
       caption = &quot;Index weights per genetic SD (other traits 0)&quot;)</code></pre>
 <table style="width:100%;">
@@ -2757,21 +2755,20 @@ gives good EBVs.</strong></p>
 ssGBLUP’s pooled NUE accuracy in the youngest generation was 0.01 (slope
 0.04) against a within-breed accuracy of 0.15, and its breed means were
 not in the order of the true breed means (JER ranked lowest). In the
-archived run with the 9-correlation matrix (1-3 Nov), the same model
-gave a pooled accuracy of 0.00 against 0.24 within breed, because it
-ranked the breed with the highest true mean lowest. So the breed-level
-part of single-step EBVs is unstable between runs. Because breed is a
-fixed effect, that part carries no information in any model, and it is
+archived run with the 9-correlation matrix, the same model gave a pooled
+accuracy of 0.00 against 0.24 within breed, because it ranked the breed
+with the highest true mean lowest. So the breed-level part of
+single-step EBVs is unstable between runs. Because breed is a fixed
+effect, that part carries no information in any model, and it is
 consistent with the known incompatibility between the genomic matrix G
 and the pedigree matrix A<sub>22</sub> (different bases and genetic
 means) in single-step evaluation (Vitezica et al. 2011, <em>Genet
-Res</em> 93:357-366). <strong>Correction (7 Nov 2026):</strong> an
-earlier version said that no adjustment was tested. In fact
-<code>ssGBLUP</code> has always used G rescaled to A<sub>22</sub> (a +
-bG, Christensen et al. 2012), pooled over the three breeds. Since 7 Nov
-the breed-metafounder model (<code>ssGBLUP_MF</code>; Legarra et
-al. 2015, <em>Genetics</em> 200:455-468) is fitted alongside it; the
-comparison is below.</li>
+Res</em> 93:357-366). <strong>Correction:</strong> an earlier version
+said that no adjustment was tested. In fact <code>ssGBLUP</code> has
+always used G rescaled to A<sub>22</sub> (a + bG, Christensen et
+al. 2012), pooled over the three breeds. The breed-metafounder model
+(<code>ssGBLUP_MF</code>; Legarra et al. 2015, <em>Genetics</em>
+200:455-468) is fitted alongside it; the comparison is below.</li>
 <li><em>Pooled-adjusted G vs metafounders.</em> Chosen per trait
 (decision rule of file 02: within-breed accuracy, ties within 1 SE
 broken by dispersion slope): NUE ssGBLUP (MF minus pooled -0.001, SE
@@ -4890,7 +4887,7 @@ if (nrow(reps)) {
     pair_test(&quot;GS_NTM_NUE35_OCS_dF1&quot;, &quot;GS_NTM_NUE35&quot;, v))))
   pk(pt[, .(comparison, trait, breed, n, mean_diff, sd_diff, same_sign, p_paired)], digits = 4,
         caption = &quot;Table A (p-values only). Paired differences between scenarios (same seed within replicate); same_sign = replicates with the majority sign; paired t-test, uncorrected&quot;)
-  # 13 Nov 2026 (my decision): correction for multiple testing. One family = all paired tests of this section.
+  # Correction for multiple testing. One family = all paired tests of this section.
   # EUR is NTM times a constant per breed (the same test), so it is not counted twice and takes the NTM values.
   fam &lt;- pt[trait != &quot;EUR&quot; &amp; !is.na(p_paired)]
   fam[, `:=`(p_BH = p.adjust(p_paired, method = &quot;BH&quot;), p_Bonferroni = p.adjust(p_paired, method = &quot;bonferroni&quot;))]
@@ -8692,9 +8689,9 @@ Benjamini-Hochberg (to be read as not established)</caption>
 </tr>
 </tbody>
 </table>
-<p><strong>Multiple testing (13 Nov 2026).</strong> The section runs 120
-paired tests, so about 6 would fall below 0.05 by chance if no scenario
-differed. Three readings are given:</p>
+<p><strong>Multiple testing.</strong> The section runs 120 paired tests,
+so about 6 would fall below 0.05 by chance if no scenario differed.
+Three readings are given:</p>
 <table>
 <colgroup>
 <col width="20%" />
@@ -9126,7 +9123,7 @@ best model or within 0.05 of the best in 10 of 10 trait x
 validation-scheme comparisons. <em>Inside the breeding programme (04b, 2
 replicates of GS_NTM_NUE35):</em> SNPBLUP: NTM +5.91, NUE +3.82, 37 s
 per evaluation (x1.0); ssGBLUP: could not be run (killed for exceeding
-the ~6.1 GB memory limit of the local machine, 8 Nov 2026), so
+the ~6.1 GB memory limit of the local machine), so
 <strong>SNPBLUP</strong> was used for all replicate runs (rule: ssGBLUP
 only if higher NTM and not lower NUE response at no more than twice the
 run time). For routine evaluation the single-step family remains the

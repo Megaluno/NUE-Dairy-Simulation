@@ -1,7 +1,6 @@
 ---
-title: "00b - Update check: Saved Feed replaces feeding rate and DMI; CFIT population (7 Nov 2026)"
+title: "00b - Update check: Saved Feed replaces feeding rate and DMI; CFIT population"
 author: "Prepared by Emmanuel Ismaila for QGG, Aarhus University"
-date: "`r Sys.Date()`"
 output:
   html_document:
     toc: true
@@ -16,12 +15,12 @@ library(data.table); library(knitr)
 # Purpose
 
 This file **does not change the pipeline**. It compares the parameter set written by
-`00_genetic_parameters.Rmd` (7 Nov 2026) with the previous one (archived in
-`archive_rg28_2026-11-05/params/`, used for the runs of 5 Nov 2026), so every change is visible
+`00_genetic_parameters.Rmd` with the previous one (archived in
+`archive_rg28/params/`, used for the earlier runs), so every change is visible
 before files 01-05 are re-run. The previous version of this file (resilience QR vs MA and Saved
-Feed as raw vs production-corrected DMI, 4 Nov) is in the same archive folder.
+Feed as raw vs production-corrected DMI) is in the same archive folder.
 
-Changes made on 7 Nov 2026, all by my decision:
+Changes made:
 
 1. Feeding rate (FR) is replaced by **Saved Feed (SF)**; DMI is dropped; ECM and body weight are
    not added as traits.
@@ -31,7 +30,7 @@ Changes made on 7 Nov 2026, all by my decision:
    (largest-remainder rounding of 39 farms scaled to 40).
 
 ```{r load}
-old_dir <- "archive_rg28_2026-11-05/params"; new_dir <- "params"
+old_dir <- "archive_rg28/params"; new_dir <- "params"
 h2_old <- fread(file.path(old_dir, "h2.csv")); h2_new <- fread(file.path(new_dir, "h2.csv"))
 RG_old <- readRDS(file.path(old_dir, "RG_matrix.rds")); RG_new <- readRDS(file.path(new_dir, "RG_matrix.rds"))
 src_old <- fread(file.path(old_dir, "rg_sourced.csv")); src_new <- fread(file.path(new_dir, "rg_sourced.csv"))
@@ -45,7 +44,7 @@ hd_old <- fread(file.path(old_dir, "herds.csv")); hd_new <- fread(file.path(new_
 ```{r traits}
 tr <- data.table(trait = union(h2_old$code, h2_new$code))
 tr[, `:=`(before = trait %in% h2_old$code, now = trait %in% h2_new$code)]
-kable(tr, caption = "Traits before (5 Nov) and now (7 Nov)")
+kable(tr, caption = "Traits before and now")
 hh <- merge(h2_old[, .(code, HOL_old = HOL, RDC_old = RDC, JER_old = JER)],
             h2_new[, .(code, HOL_new = HOL, RDC_new = RDC, JER_new = JER)], by = "code", all = TRUE)
 kable(hh, caption = "Heritabilities before and now (NA = trait not in that set)")
@@ -56,7 +55,7 @@ kable(hh, caption = "Heritabilities before and now (NA = trait not in that set)"
 ```{r population}
 pop <- merge(sp_old[, .(cows_old = sum(n)), by = .(breed, country)],
              sp_new[, .(cows_new = sum(n), herds_new = sum(farms)), by = .(breed, country)], by = c("breed", "country"), all = TRUE)
-kable(pop, caption = "Cows per breed x country before (ICAR 2026 abstract, equal split) and now (CFIT slides, my rule)")
+kable(pop, caption = "Cows per breed x country before (ICAR 2026 abstract, equal split) and now (CFIT slides, equal-split rule)")
 cat(sprintf("Cows: %d before, %d now. Herds: %d mixed-breed before, %d single-breed now.\n",
             sum(sp_old$n), sum(sp_new$n), nrow(hd_old), nrow(hd_new)))
 ```
@@ -80,8 +79,8 @@ cat(sprintf("Sourced pairs: %d of %d before, %d of %d now.\n",
 
 Two NAV sets of Saved Feed index correlations exist for genomic bull calves: Stephansen et al.
 (2025, Interbull Bull 61, Table 2; bulls born 2022) and the NAV note *Economic weight of Saved feed
-in NTM* (2026, Table 4; bulls born 2022-2024). File 00 uses the NAV 2026 note (recent over old,
-my rule). The table shows how much the choice matters, with the same CFIT cow weights and the same
+in NTM* (2026, Table 4; bulls born 2022-2024). File 00 uses the NAV 2026 note (recent over old).
+The table shows how much the choice matters, with the same CFIT cow weights and the same
 sign reversals (Fertility and Udder health/Mastitis reversed into ICF and SCS).
 
 ```{r sf_sources}

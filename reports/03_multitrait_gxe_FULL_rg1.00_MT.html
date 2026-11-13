@@ -1605,7 +1605,6 @@ border-radius: 0px;
 <h1 class="title toc-ignore">03 - Multi-trait Bayesian models (Diagonal,
 Unstructured, Factor-analytic) and GxE</h1>
 <h4 class="author">Prepared by Emmanuel Ismaila for QGG, Aarhus University</h4>
-<h4 class="date">2026-11-08</h4>
 
 </div>
 
@@ -3202,7 +3201,7 @@ Section 4). Fixed effects: breed + herd x generation.</p>
 index series for the four countries have not been sourced (see the open
 items in file 00).</p>
 <pre class="r"><code># Realised between-country genetic correlation in the simulation (truth)
-# 8 Nov 2026 (memory): genetic values per saved generation, stacked; same rows as gv() of the merged population
+# Memory: genetic values per saved generation, stacked; same rows as gv() of the merged population
 GV &lt;- do.call(rbind, lapply(unname(st$kept_cows), function(p) { g &lt;- gv(p); rownames(g) &lt;- p@id; g }))
 GV &lt;- GV[gid, , drop = FALSE]
 countries &lt;- unique(fread(&quot;params/breed_country_split.csv&quot;)$country)

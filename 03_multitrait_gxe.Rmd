@@ -1,7 +1,6 @@
 ---
 title: "03 - Multi-trait Bayesian models (Diagonal, Unstructured, Factor-analytic) and GxE"
 author: "Prepared by Emmanuel Ismaila for QGG, Aarhus University"
-date: "`r Sys.Date()`"
 output:
   html_document:
     toc: true
@@ -17,7 +16,7 @@ params:
   run_mt: true                  # multi-trait MCMC (Part A); false = GxE only
   gxe_traits: ["MY", "NUE"]
   gxe_sommer_models: ["M1_main", "M2_CS"]   # add "M3_DIAG", "M4_US", "M5_FA" on a cluster
-  gxe_reml_iter: 100            # raised from 30 on 7 Nov 2026: 30 did not converge for M2_CS
+  gxe_reml_iter: 100            # raised from 30: 30 did not converge for M2_CS
   seed: 20261102
 ---
 
@@ -206,17 +205,17 @@ through **relatives across countries** (via G).
 | M5 FA | factor-analytic, 1 factor (`fam`) | parsimonious US |
 
 Residual variance is heterogeneous by country in every model (`dsm(country)`), as in the NAV
-yield model (NAV May 2024, Section 4). Fixed effects: breed + herd x generation; because herds are single-breed (7 Nov 2026), breed is contained in herd x generation and is dropped (same rule as file 02).
+yield model (NAV May 2024, Section 4). Fixed effects: breed + herd x generation; because herds are single-breed, breed is contained in herd x generation and is dropped (same rule as file 02).
 
 **THI reaction norm:** not run yet. Temperature-humidity index series for the four
 countries have not been sourced (see the open items in file 00).
 
 ```{r gxe_truth, eval=isTRUE(params$run_gxe)}
 # Realised between-country genetic correlation in the simulation (truth)
-# 8 Nov 2026 (memory): genetic values per saved generation, stacked; same rows as gv() of the merged population
+# Memory: genetic values per saved generation, stacked; same rows as gv() of the merged population
 GV <- do.call(rbind, lapply(unname(st$kept_cows), function(p) { g <- gv(p); rownames(g) <- p@id; g }))
 GV <- GV[gid, , drop = FALSE]
-st$pop <- NULL; st$kept_cows <- NULL; invisible(gc())   # 8 Nov 2026: free the genomes (7 GB machine); not used below
+st$pop <- NULL; st$kept_cows <- NULL; invisible(gc())   # free the genomes (7 GB machine); not used below
 countries <- unique(fread("params/breed_country_split.csv")$country)
 if (st$gxe_rg < 1) {
   true_rg_c <- sapply(params$gxe_traits, function(tr) {
@@ -239,7 +238,7 @@ ctl <- mmes_control(convergence = list(maxIters = as.integer(params$gxe_reml_ite
                     diagnostics = list(verbose = FALSE))
 fit_gxe <- function(tr, form) {
   dg$y <- dg[[tr]]
-  # herds are single-breed (7 Nov 2026), so breed is nested in herd-generation and breed + hg is
+  # herds are single-breed, so breed is nested in herd-generation and breed + hg is
   # rank deficient; same rule as file 02 (fixed_formula): drop breed when hg already contains it
   fx <- if (all(as.data.table(dg)[, uniqueN(breed), by = hg]$V1 == 1)) y ~ hg else y ~ breed + hg
   tryCatch(mmes(fx, random = form,

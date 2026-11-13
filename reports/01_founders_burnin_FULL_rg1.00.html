@@ -1605,7 +1605,6 @@ border-radius: 0px;
 <h1 class="title toc-ignore">01 - Coalescent founders, 3 breeds x 4
 countries, phenotypic burn-in</h1>
 <h4 class="author">Prepared by Emmanuel Ismaila for QGG, Aarhus University</h4>
-<h4 class="date">2026-11-08</h4>
 
 </div>
 
@@ -1642,7 +1641,7 @@ traits    &lt;- h2$code
 nT        &lt;- length(traits)
 breeds    &lt;- c(&quot;HOL&quot;, &quot;RDC&quot;, &quot;JER&quot;)
 countries &lt;- unique(split$country)            # DNK, SWE, FIN, DEU (file 00)
-herds_tab &lt;- fread(&quot;params/herds.csv&quot;)       # 40 single-breed herds per breed x country (file 00, 7 Nov 2026)
+herds_tab &lt;- fread(&quot;params/herds.csv&quot;)       # 40 single-breed herds per breed x country (file 00)
 nC        &lt;- length(countries)
 kable(h2[, .(code, HOL, RDC, JER, status)])</code></pre>
 <table>
@@ -1754,7 +1753,7 @@ empirical estimate.</p>
 design &lt;- list(
   n_founder_per_breed = if (FULL) 600 else 150,   # founder individuals per breed from MaCS
   scale               = if (FULL) 1 else 0.05,    # TEST mode = 5% of 28,400 cows
-  n_chr               = 29,                       # bovine autosomes (7 Nov 2026; was 10)
+  n_chr               = 29,                       # bovine autosomes (was 10)
   seg_sites_per_chr   = 2500,                     # candidate segregating sites kept per chr (&gt;= SNP + QTL)
   snp_per_chr         = 345,                      # 29 x 345 = 10,005 SNP (50k planned for the cluster; was 10 x 500)
   qtl_per_chr         = 100,                      # 2,900 QTL per trait, non-overlapping with SNP
@@ -1890,7 +1889,7 @@ cmd &lt;- paste(
   &quot;-ej&quot;, design$split_gen_JER     / (4 * Ne) + 1e-6, &quot;3 1&quot;)
 cat(cmd, &quot;\n&quot;)</code></pre>
 <pre><code>## 93333333 -t 3.384e-06 -r 3.3336e-06 -I 3 1200 1200 1200 -eN 0.00833333333333333 1.33333333333333 -eN 0.0166666666666667 2.77777777777778 -eN 0.0333333333333333 3.88888888888889 -eN 0.05 11.1111111111111 -eN 0.0666666666666667 16.6666666666667 -eN 0.427777777777778 22.2222222222222 -eN 1.26111111111111 27.7777777777778 -eN 1.81666666666667 38.8888888888889 -eN 4.87222222222222 77.7777777777778 -eN 6.53888888888889 111.111111111111 -eN 9.31666666666667 188.888888888889 -eN 92.0944444444444 688.888888888889 -ej 0.0833343333333333 2 1 -ej 0.138889888888889 3 1</code></pre>
-<pre class="r"><code># Founder cache (8 Nov 2026). The founders depend only on the seed (seed + rep_id) and the MaCS
+<pre class="r"><code># Founder cache. The founders depend only on the seed (seed + rep_id) and the MaCS
 # settings, and nothing random happens before this chunk. So every burn-in with the same rep_id
 # (main, rg 0.9, NUEx0, NUEx05, SFh008) already drew identical founders; the cache only avoids
 # re-running MaCS. The RNG state after MaCS is stored with the founders and restored, so a cached
@@ -2009,7 +2008,7 @@ times can be tuned to match it.</p>
 blocking and phenotypes</h1>
 <p>Each cow belongs to a <strong>breed</strong> (factor), a
 <strong>country</strong> (factor) and a <strong>herd</strong> (block
-nested in breed x country). Since 7 Nov 2026 herds are
+nested in breed x country). Herds are
 <strong>single-breed</strong>, as on the CFIT farms (40
 herds, file 00), and cows go to countries in the CFIT proportions of
 their breed. Herd effects are redrawn every generation

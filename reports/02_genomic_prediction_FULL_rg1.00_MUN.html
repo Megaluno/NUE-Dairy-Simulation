@@ -1607,7 +1607,6 @@ cross-validated genomic prediction</h1>
 <h3 class="subtitle">ABLUP-REML, GBLUP, ssGBLUP, weighted ssGBLUP,
 rrBLUP, BayesA, BayesB</h3>
 <h4 class="author">Prepared by Emmanuel Ismaila for QGG, Aarhus University</h4>
-<h4 class="date">2026-11-08</h4>
 
 </div>
 
@@ -1690,8 +1689,7 @@ G<sub>b</sub><sup>-1</sup> - A<sub>22</sub><sup>-1</sup>]</td>
 </table>
 <p>Fixed effects in every model: <strong>breed</strong> (factor) +
 <strong>herd x generation</strong> (block; herd effects were redrawn
-every generation in file 01, and herds are nested in country). Since 7
-Nov 2026 the herds are single-breed (CFIT farms, file 00), so herd x
+every generation in file 01, and herds are nested in country). The herds are single-breed (CFIT farms, file 00), so herd x
 generation also identifies the breed; the breed term is then dropped as
 redundant (same fit, full-rank design).</p>
 </div>
@@ -1754,7 +1752,7 @@ are algebraically equivalent for prediction:</p>
 <li><code>Z = M - 2p</code>: centred by allele frequency (VanRaden 2008,
 method 1).</li>
 </ul>
-<pre class="r"><code># 8 Nov 2026 (memory, 7 GB machine): subset every saved generation to the sampled cows BEFORE merging,
+<pre class="r"><code># Memory, 7 GB machine: subset every saved generation to the sampled cows BEFORE merging,
 # and drop the last-generation population that this file does not use. Same cows, same order as before.
 st$pop &lt;- NULL
 gid &lt;- as.character(geno_ids)
@@ -1865,7 +1863,7 @@ cat(&quot;H^-1 dimension:&quot;, nrow(Hinv), &quot;| cor(offdiag G, offdiag A22)
     round(cor(G[upper.tri(G)], A22[upper.tri(A22)]), 3), &quot;\n&quot;)</code></pre>
 <pre><code>## H^-1 dimension: 12036 | cor(offdiag G, offdiag A22): 0.662</code></pre>
 <pre class="r"><code>progress(&quot;Hinv built: &quot;, format(Sys.time() - t0))</code></pre>
-<p><strong>Correction to the record (7 Nov 2026).</strong> An earlier
+<p><strong>Correction to the record.</strong> An earlier
 text said that no adjustment of G to A<sub>22</sub> was tested. That was
 wrong: the <code>tune_G()</code> step above has always rescaled G as a +
 bG to the mean diagonal and mean of A<sub>22</sub> (Christensen et
@@ -2719,8 +2717,7 @@ model is more reliable?</h2>
 <p>Both single-step models use the same data, pedigree and REML. They
 differ only in how the genomic and pedigree relationships are made
 compatible: pooled a + bG rescaling (<code>ssGBLUP</code>) versus breed
-metafounders (<code>ssGBLUP_MF</code>). <strong>Decision rule (mine,
-fixed before seeing the result):</strong></p>
+metafounders (<code>ssGBLUP_MF</code>). <strong>Decision rule (fixed before seeing the result):</strong></p>
 <ol style="list-style-type: decimal">
 <li>Primary criterion: mean <strong>within-breed accuracy</strong> over
 all focus traits and validation sets, because selection in file 04 is
@@ -2788,8 +2785,7 @@ expectation (sanity check, not a result)</h2>
 3:e3395), r = sqrt(N h<sup>2</sup> / (N h<sup>2</sup> + M<sub>e</sub>)),
 with M<sub>e</sub> = 2 N<sub>e</sub> L / log(4 N<sub>e</sub> L) (Goddard
 2009, <em>Genetica</em>). N<sub>e</sub> = 90 (CATTLE history), L =
-genome length in Morgans of the simulated chromosomes (29 since 7 Nov
-2026). This formula assumes one homogeneous population, so it is only a
+genome length in Morgans of the simulated chromosomes (29). This formula assumes one homogeneous population, so it is only a
 rough reference here.</p>
 <pre class="r"><code>L  &lt;- sum(sapply(SP$genMap, function(x) max(x)))
 Ne &lt;- 90

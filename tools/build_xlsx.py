@@ -13,11 +13,11 @@ inb_rows = list(csv.DictReader(open(os.path.join(D, "replicate_dF.csv"))))      
 
 SCEN = ["GS_NTM", "GS_NTM_NUE35", "GS_NTM_NUE75", "GS_NTM_NUE35_MUN", "GS_NTM_NUE75_CH4", "GS_NTM_NUE35_OCS_dF1"]
 BREEDS = ["HOL", "RDC", "JER"]
-TRAITS = ["NUE", "MUN", "CH4", "MY", "PY", "SF"]   # 11 Nov 2026: SF replaces DMI (05 writes SF)
+TRAITS = ["NUE", "MUN", "CH4", "MY", "PY", "SF"]   # SF replaces DMI (05 writes SF)
 EXTRA = ["NTM", "EUR", "dF"]          # per replicate x breed, from replicate_dF.csv
 FMT = {"NTM": "0.0", "EUR": "0.0", "dF": "0.00%"}
 UNIT = {"NTM": "NTM index units", "EUR": "EUR per cow-year", "dF": "per generation"}
-REPS = range(10)   # 11 Nov 2026: 10 replicates per main scenario
+REPS = range(10)   # 10 replicates per main scenario
 COMPARISONS = [("GS_NTM_NUE35", "GS_NTM"), ("GS_NTM_NUE75", "GS_NTM"), ("GS_NTM_NUE35_MUN", "GS_NTM_NUE35"),
                ("GS_NTM_NUE75_CH4", "GS_NTM_NUE75"), ("GS_NTM_NUE35_OCS_dF1", "GS_NTM_NUE35")]
 
@@ -147,7 +147,7 @@ for i, it in enumerate([
     (2, "Decide the NUE weight on top of NTM. The NUE gain is in Table 2; the NTM cost was mostly not detectable in 10 replicates (see the SD of the NTM paired difference in Table 2), so price it from selection-index theory (05_summary.html, file 00)", "Open", "Breeding organisation"),
     (6, "If a simulated NTM cost is required: the number of replicates needed for 80% power is computed per breed in 05_summary.html, item 2", "Proposed", "Cluster run"),
     (3, "Make G compatible with A22 (adjusted G or metafounders) before comparing bulls across breeds; current ssGBLUP EBVs are valid within breed only", "Proposed", "Pipeline (file 02)"),
-    (4, "Independent founder populations per replicate", "Done (11 Nov 2026)", "Pipeline"),
+    (4, "Independent founder populations per replicate", "Done", "Pipeline"),
     (5, "Full-size genotyped run (all 25,614 cows) for G-based models and GxE estimation", "Proposed", "Cluster run"),
 ], 4):
     for j, v in enumerate(it, 1):
