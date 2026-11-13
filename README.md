@@ -1,12 +1,13 @@
 # Can genomic selection improve nitrogen use efficiency in dairy cattle?
 
-A reproducible simulation pipeline in R Markdown (AlphaSimR) that models a Nordic-style dairy breeding programme:
-Holstein (HOL), Red Dairy Cattle (RDC) and Jersey (JER) in single-breed herds across Denmark, Sweden, Finland and Germany.
+A reproducible simulation pipeline in R Markdown (AlphaSimR) that models a Nordic-style dairy breeding programme: Holstein (HOL), Red Dairy Cattle (RDC) and Jersey (JER) in single-breed herds across Denmark, Sweden, Finland and Germany.
 
-It asks one question: **if nitrogen use efficiency (NUE) is added to the Nordic Total Merit (NTM) breeding goal, how much NUE is gained, and what does it cost in total merit, methane and inbreeding?**
+**Central Question:** If nitrogen use efficiency (NUE) is added to the Nordic Total Merit (NTM) breeding goal, how much NUE is gained, and what does it cost in total merit, methane and inbreeding?
 
-> **This is a simulation.** Genetic parameters come from published studies, but the population, genomes and phenotypes are simulated.
-> Results show what the design and the published parameters imply, not what real Nordic data would show.
+> <u><strong>This is a simulation.</strong></u>
+>
+> **Genetic parameters come from published studies (see Step 0), but the population, genomes and phenotypes were simulated.
+> Results are implications of the design and published parameters, not what real Nordic data would show.**
 
 ## Contents
 
@@ -29,8 +30,7 @@ It asks one question: **if nitrogen use efficiency (NUE) is added to the Nordic 
 
 ## Main results
 
-Responses are over 10 generations of selection, in founder genetic standard deviations (SD).
-Differences are paired within replicate (10 replicates, each with its own founder population). The p-values in this table are uncorrected paired t-tests; see [Statistical testing](#statistical-testing-and-multiple-comparisons) for the corrected reading.
+Responses are over 10 generations of selection. Differences are paired within replicate (10 replicates, each with its own founder population). The p-values in this table are uncorrected paired t-tests; see [Statistical testing](#statistical-testing-and-multiple-comparisons) for the corrected reading.
 
 | Question | Result |
 |---|---|
@@ -70,7 +70,7 @@ flowchart TD
 
 ## Step by step
 
-Each step is one R Markdown file. It reads only the outputs of earlier steps and writes a self-contained HTML report (in [`reports/`](reports)).
+Each step is one R Markdown file and a self-contained HTML report (in [`reports/`](reports)).
 
 ### Step 0: genetic parameters and breeding goal (`00_genetic_parameters.Rmd`)
 
@@ -83,7 +83,7 @@ Each step is one R Markdown file. It reads only the outputs of earlier steps and
 - **Heritabilities** are breed-specific where published: yield and fertility from the NAV routine evaluation (May 2024); MUN from Buitenhuis & Poulsen (2023); NUE 0.13 from Chen et al. (2021); CH4 0.175 from Schneider et al. (2025); Saved Feed 0.23 from Lidauer et al. (2023).
 - **Genetic correlations**: 40 of 55 trait pairs have a published source. Rules: index-based values only from Nordic breeds, genuine estimates from European studies, recent over old. Evidence for every pair is in [`results/rg_evidence.xlsx`](results/rg_evidence.xlsx).
 - **Unsourced pairs** take the values implied by *weighted bending* (Jorjani et al. 2003), which makes the matrix positive definite while moving published values by at most about 0.015. These values are not estimates.
-- **NUE correlations** (milk 0.52, protein 0.80, MUN -0.12) all come from one study of grazing Irish cows (Tavernier et al. 2024). This is the pipeline's weakest input, so it gets its own sensitivity analysis.
+- **NUE correlations** (milk 0.52, protein 0.80, MUN -0.12) all come from one study of grazing Irish cows (Tavernier et al. 2024). This was my weakest input, so I conducted a sensitivity analysis to confirm its influence.
 - **Breeding goal**: NTM sub-index weights (May 2026) for the sub-indices that have a simulated trait (64% of NTM weight for HOL and RDC, 72% for JER). NUE has no published economic value, so weights of 0.35 (equal to Saved Feed) and 0.75 are tested.
 
 **Writes** `params/*.csv` and `params/RG_matrix.rds`.
@@ -150,7 +150,6 @@ Each step is one R Markdown file. It reads only the outputs of earlier steps and
 
 - **Evaluation model inside the programme**: SNP-BLUP, solved in its n x n (dual) form. `04b_model_test.Rmd` was designed to compare it with single-step GBLUP, but single-step exceeded the memory of the machine used.
 - **Training set**: about 6,000 genotyped and phenotyped cows per generation.
-- **CH4 weight -0.5** is the knee of a selection-index sweep in Step 0: the largest CH4 reduction per unit of NTM given up.
 - **Recorded per generation**: genetic trends, EBV accuracy, the four-path breeder's equation, genomic inbreeding.
 
 ### Step 5: summary and statistics (`05_summary.Rmd`)
@@ -159,7 +158,7 @@ Each step is one R Markdown file. It reads only the outputs of earlier steps and
 
 **Key choices.**
 
-- **Paired tests**: within a replicate, all scenarios share founders, burn-in and random seed, so the difference between two scenarios is tested with a paired t-test over 10 replicates.
+- **Paired tests**: within a replicate, all scenarios share founders, burn-in and random seed, so the difference between two scenarios is tested with a paired t-test over 10 replicates. Multiple-testing corrections (Benjamini–Hochberg and Bonferroni adjusted p-values) were added for comparison (Benjamini–Hochberg is proven for independent or positively dependent tests, not for every form of dependence); see [Statistical testing](#statistical-testing-and-multiple-comparisons).
 - **Check against theory**: the simulated NUE response relative to `GS_NTM` matches selection-index theory at weight 0.35 (HOL 1.32 vs 1.32) and falls below it at 0.75, consistent with NUE EBVs being less accurate than protein yield EBVs.
 - **Power**: the report computes how many replicates would be needed to detect the theoretical NTM cost (over 100 per breed at weight 0.35).
 
