@@ -1,0 +1,40 @@
+# Statistics and multiple testing {#sec-statistics}
+
+::: {.lead}
+Which differences between programmes are real, and which could be chance? This chapter explains the paired tests and why the corrected p-values are the ones to read.
+:::
+
+## Paired tests
+
+Within a replicate, all programmes share the same founders, burn-in and random seed. The difference between two programmes is therefore computed within each replicate and tested with a paired t-test over the 10 replicates, once per breed.
+
+## Why correction is needed
+
+Step 5 runs 120 paired tests (5 comparisons x 8 measures x 3 breeds). Even if no programme differed, about 6 tests would fall below p = 0.05 by chance. Every test is therefore reported three ways.
+
+| Method | Controls | Tests significant at 5% (of 120) |
+|---|---|---|
+| Uncorrected p-value | The error rate of each single test | 57 |
+| Benjamini-Hochberg | The false discovery rate: the expected share of false results among those declared significant | 42 |
+| Bonferroni | The family-wise error rate: the chance of even one false result | 15 |
+
+Per comparison:
+
+{{< include _includes/mt_counts.md >}}
+
+## The headline results under each method
+
+{{< include _includes/mt_key.md >}}
+
+## Which method to read
+
+::: {.callout-tip}
+## Benjamini-Hochberg is the preferred reading
+The study screens many differences rather than confirming one hypothesis, the tests are dependent (the same replicates, correlated traits), and there are only 10 replicates. Bonferroni would hide real differences; uncorrected p-values overstate the evidence. Bonferroni is kept as the conservative bound: a result that passes it is beyond reasonable doubt in this simulation.
+:::
+
+Benjamini-Hochberg is proven for independent or positively dependent tests (Benjamini & Hochberg 1995; Benjamini & Yekutieli 2001); it is not guaranteed under every form of dependence.
+
+**What changes after correction.** The NUE gains, the methane, milk urea and inbreeding effects all hold. The NTM costs of optimum contribution selection and of the milk urea weight, and the apparent NTM gain in Holstein at NUE weight 0.35, do not. They should be read as not established.
+
+All adjusted p-values are in [the multiple-testing table](https://github.com/Megaluno/NUE-Dairy-Simulation/blob/main/results/sim_FULL_rg1.00/paired_tests_multiple_testing.csv) and in Tables A to E of [the summary report](../reports/05_summary.html).

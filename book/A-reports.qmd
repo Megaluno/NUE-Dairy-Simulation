@@ -1,0 +1,20 @@
+# Full reports and downloads {#sec-reports}
+
+Each report is the complete rendered R Markdown file, with code and output. Steps 1 and 4 show replicate 0.
+
+| Step | Report |
+|---|---|
+| 0 | [Genetic parameters and breeding goal](../reports/00_genetic_parameters.html) |
+| 0b | [Check of the correlation update](../reports/00b_rg_update_check.html) |
+| 1 | [Founders and burn-in](../reports/01_founders_burnin_FULL_rg1.00.html) |
+| 2 | Genomic prediction: [NUE](../reports/02_genomic_prediction_FULL_rg1.00_NUE.html), [milk urea](../reports/02_genomic_prediction_FULL_rg1.00_MUN.html), [Saved Feed](../reports/02_genomic_prediction_FULL_rg1.00_SF.html), [methane](../reports/02_genomic_prediction_FULL_rg1.00_CH4.html), [NUE with GxE data](../reports/02_genomic_prediction_FULL_rg0.90_NUE.html) |
+| 3 | [Multi-trait models](../reports/03_multitrait_gxe_FULL_rg1.00_MT.html), [GxE control data](../reports/03_multitrait_gxe_FULL_rg1.00_GxE.html), [GxE data](../reports/03_multitrait_gxe_FULL_rg0.90_GxE.html) |
+| 4 | Breeding programmes: [phenotypic](../reports/04_breeding_program_sim_FULL_rg1.00_PHENO.html), [NTM](../reports/04_breeding_program_sim_FULL_rg1.00_GS_NTM.html), [NUE 0.35](../reports/04_breeding_program_sim_FULL_rg1.00_GS_NTM_NUE35.html), [NUE 0.75](../reports/04_breeding_program_sim_FULL_rg1.00_GS_NTM_NUE75.html), [milk urea](../reports/04_breeding_program_sim_FULL_rg1.00_GS_NTM_NUE35_MUN.html), [methane](../reports/04_breeding_program_sim_FULL_rg1.00_CH4_KNEE.html), [optimum contribution](../reports/04_breeding_program_sim_FULL_rg1.00_GS_NTM_NUE35_OCS_dF1.html), [mate allocation](../reports/04_breeding_program_sim_FULL_rg1.00_GS_NTM_NUE35_MATE.html) |
+| 4b | [SNP-BLUP vs single-step model test](../reports/04b_model_test.html) |
+| 5 | [Summary, statistics and breeding plan](../reports/05_summary.html) |
+
+## Downloads
+
+- [Replicate results workbook](../results/NUE_replicate_results.xlsx) (formulas, no typed numbers)
+- [Genetic correlation evidence workbook](../results/rg_evidence.xlsx)
+- All result tables (CSV) are in the [`results/` folder on GitHub](https://github.com/Megaluno/NUE-Dairy-Simulation/tree/main/results)

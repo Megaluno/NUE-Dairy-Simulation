@@ -1,0 +1,503 @@
+[
+  {
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "Nitrogen Use Efficiency in Dairy Breeding",
+    "section": "",
+    "text": "Welcome",
+    "crumbs": [
+      "Welcome"
+    ]
+  },
+  {
+    "objectID": "index.html#the-question",
+    "href": "index.html#the-question",
+    "title": "Nitrogen Use Efficiency in Dairy Breeding",
+    "section": "The question",
+    "text": "The question\nDairy cows turn only part of the nitrogen they eat into milk protein; the rest leaves the farm as urine and faeces. The Nordic Total Merit index (NTM) does not weigh NUE directly. So the central question is:\n\nIf NUE is added to the NTM breeding goal, how much NUE is gained, and what does it cost in total merit, methane and inbreeding?",
+    "crumbs": [
+      "Welcome"
+    ]
+  },
+  {
+    "objectID": "index.html#the-answer-in-one-table",
+    "href": "index.html#the-answer-in-one-table",
+    "title": "Nitrogen Use Efficiency in Dairy Breeding",
+    "section": "The answer in one table",
+    "text": "The answer in one table\nResponses are over the simulated selection period. Differences are paired within replicate (10 replicates, each with its own founder population). Significance here follows the Benjamini-Hochberg correction explained in 8  Statistics and multiple testing.\n\n\n\n\n\n\n\nQuestion\nResult\n\n\n\n\nDoes NTM alone improve NUE?\nYes, by 3.3 to 3.4 genetic SD in all breeds, but only through NUE’s genetic correlations with yield. With those correlations set to 0, the gain is about 0.\n\n\nWhat does an explicit NUE weight add?\nWeight 0.35: HOL +1.08, JER +0.94, RDC +0.82 SD of NUE, significant in all three breeds. Weight 0.75: +0.95 to +1.43 SD.\n\n\nWhat does the NUE weight cost in NTM?\nToo small to detect at weight 0.35: theory predicts about 1.3 to 1.6 index units, and the replicate SD of the difference is 5 to 6 units.\n\n\nWhat happens to methane?\nMethane rises 1.6 to 2.1 SD under NTM alone. A methane weight of -0.5 lowers it by 1.4 to 1.6 SD, at about EUR 28 to 39 per cow-year (the cost passes correction in HOL and JER only).\n\n\nDoes selecting against milk urea (MUN) help NUE?\nNo. MUN falls 1.2 to 1.4 SD and NUE does not change.\n\n\nCan inbreeding be controlled?\nUnconstrained genomic selection: 1.8 to 2.2% per generation. Optimum contribution selection: 0.7 to 1.0%.\n\n\nIs there genotype x country interaction?\nIt could not be estimated reliably at this sample size.",
+    "crumbs": [
+      "Welcome"
+    ]
+  },
+  {
+    "objectID": "index.html#how-this-site-works",
+    "href": "index.html#how-this-site-works",
+    "title": "Nitrogen Use Efficiency in Dairy Breeding",
+    "section": "How this site works",
+    "text": "How this site works\nEach step of the pipeline is one R Markdown file, and each chapter here explains one step in the same order:\n\nWhat it does, in plain words.\nWhy the step is needed.\nThe key choices, with their sources.\nWhat it found, with the numbers from the simulation.\n\n\nflowchart TD\n    A[\"Step 0&lt;br/&gt;Genetic parameters&lt;br/&gt;and NTM breeding goal\"] --&gt; B[\"Step 1&lt;br/&gt;Founder genomes&lt;br/&gt;and burn-in\"]\n    B --&gt; C[\"Step 2&lt;br/&gt;Genomic prediction&lt;br/&gt;8 models\"]\n    B --&gt; D[\"Step 3&lt;br/&gt;Multi-trait models&lt;br/&gt;and GxE\"]\n    B --&gt; E[\"Step 4&lt;br/&gt;Breeding programme&lt;br/&gt;8 scenarios\"]\n    A --&gt; E\n    C --&gt; F[\"Step 5&lt;br/&gt;Summary, statistics,&lt;br/&gt;sensitivity, breeding plan\"]\n    D --&gt; F\n    E --&gt; F\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nTipRead the full reports\n\n\n\nEvery chapter links to the full HTML report of its step, with all code and output. They are listed together in Appendix A — Full reports and downloads.",
+    "crumbs": [
+      "Welcome"
+    ]
+  },
+  {
+    "objectID": "index.html#at-a-glance",
+    "href": "index.html#at-a-glance",
+    "title": "Nitrogen Use Efficiency in Dairy Breeding",
+    "section": "At a glance",
+    "text": "At a glance\n\n\n\n\n\n\n\nBreeds\nHolstein, Red Dairy Cattle, Jersey\n\n\nCountries\nDenmark, Sweden, Finland, Germany\n\n\nHerds\n40 single-breed herds, sized from published CFIT 3D-camera herd numbers\n\n\nTraits (11)\nMilk, protein and fat yield; Saved Feed; somatic cell score; resilience (LnVar); calving interval; longevity; milk urea nitrogen; NUE; methane\n\n\nGenome\n29 chromosomes, 10,005 SNP, 600 founders per breed\n\n\nReplicates\n10 per main scenario (independent founders), 5 per sensitivity set\n\n\nSoftware\nR 4.3.3, AlphaSimR 2.1.0, sommer 4.5.12, BGLR 1.1.4, rrBLUP 4.6.3, nadiv 2.18.0\n\n\n\nThe code, parameters and every result table are in the GitHub repository. The repository is public for reading only; see its licence.",
+    "crumbs": [
+      "Welcome"
+    ]
+  },
+  {
+    "objectID": "book/01-question.html",
+    "href": "book/01-question.html",
+    "title": "1  The question and the population",
+    "section": "",
+    "text": "1.1 Nitrogen use efficiency and the breeding goal\nNUE is the share of nitrogen intake that a cow puts into milk protein. It can be predicted on farm from feed intake, diet crude protein and milk protein, which is why large-scale feed-intake recording makes a genetic evaluation of NUE realistic.\nThe Nordic Total Merit index (NTM) combines sub-indices for yield, fertility, udder health, longevity, Saved Feed and other traits. It has no weight on NUE, milk urea or methane. The simulation therefore compares the current NTM goal with versions that add NUE, milk urea or methane on top.",
+    "crumbs": [
+      "The question",
+      "<span class='chapter-number'>1</span>  <span class='chapter-title'>The question and the population</span>"
+    ]
+  },
+  {
+    "objectID": "book/01-question.html#population-sizes",
+    "href": "book/01-question.html#population-sizes",
+    "title": "1  The question and the population",
+    "section": "1.2 Population sizes",
+    "text": "1.2 Population sizes\nThe CFIT cow numbers (28,400 cows across 4 countries) reported in the Cattle FeedInTake presentation by Jan Lassen and Søren Borchersen were used (source).\nThese values have similar breed proportions to the ICAR 2026 (Verona) report of 25,614 cows (10,914 Holstein, 7,542 Jersey, 7,158 Red Dairy Cattle) on more than 30 commercial farms in Denmark, Finland, Sweden and Germany, with 1,282,122 weekly records.\nBreed sizes reported by VikingGenetics (523,000 Holstein, 121,000 Jersey, 76,000 Red Dairy) were not used: they carry no information on CFIT records, over-weight Holstein (72.6%) relative to the CFIT data (42.6%), and exclude the German data.\n\n\n\n\n\n\n\n\n\n\nBreed\nCows\nFarms\nCountry known\nRemainder\n\n\n\n\nRed Dairy Cattle\n8,100\n12\nFinland (500 cows, 2 farms), Sweden (500 cows, 2 farms)\n7,100 cows (8 farms)\n\n\nJersey\n8,300\n11\nnone\n8,300 cows (11 farms)\n\n\nHolstein\n12,000\n16\nGermany (750 cows, 2 farms)\n11,250 cows (14 farms)\n\n\n\n\n\n\n\n\n\nNoteHow the unknown part was allocated\n\n\n\nNeither source gives exact per-country counts. The known data points were kept where they are, and each breed’s remainder was split equally over the four countries. The breed labels of the three rows are a mapping: the slide shows the numbers without breed names.\n\n\nThe 39 reported farms were scaled to 40 herds, each with a single breed, as on CFIT farms. Because herd is nested in breed, later models drop breed as a separate fixed effect.",
+    "crumbs": [
+      "The question",
+      "<span class='chapter-number'>1</span>  <span class='chapter-title'>The question and the population</span>"
+    ]
+  },
+  {
+    "objectID": "book/01-question.html#germany-and-the-nav-evaluation",
+    "href": "book/01-question.html#germany-and-the-nav-evaluation",
+    "title": "1  The question and the population",
+    "section": "1.3 Germany and the NAV evaluation",
+    "text": "1.3 Germany and the NAV evaluation\nThe NAV documentation (May 2024) describes a joint Denmark-Sweden-Finland evaluation. Germany is not part of it, so NAV’s assumption of common genetic parameters for all countries does not cover German herds. That makes the genotype x country analysis (Chapter 5) more relevant for Germany than for the other three countries.\nFull report: Step 0, genetic parameters.",
+    "crumbs": [
+      "The question",
+      "<span class='chapter-number'>1</span>  <span class='chapter-title'>The question and the population</span>"
+    ]
+  },
+  {
+    "objectID": "book/02-parameters.html",
+    "href": "book/02-parameters.html",
+    "title": "2  Step 0: genetic parameters and breeding goal",
+    "section": "",
+    "text": "2.1 Criteria applied",
+    "crumbs": [
+      "The pipeline, step by step",
+      "<span class='chapter-number'>2</span>  <span class='chapter-title'>Step 0: genetic parameters and breeding goal</span>"
+    ]
+  },
+  {
+    "objectID": "book/02-parameters.html#criteria-applied",
+    "href": "book/02-parameters.html#criteria-applied",
+    "title": "2  Step 0: genetic parameters and breeding goal",
+    "section": "",
+    "text": "Only verified values from a cited source were used (VERIFIED).\nValues from neighbouring European populations were allowed for relationships with no Nordic estimate (VERIFIED-EU).\nWhere a source reported a range, the midpoint was used and the range was kept for sensitivity analysis.",
+    "crumbs": [
+      "The pipeline, step by step",
+      "<span class='chapter-number'>2</span>  <span class='chapter-title'>Step 0: genetic parameters and breeding goal</span>"
+    ]
+  },
+  {
+    "objectID": "book/02-parameters.html#heritabilities",
+    "href": "book/02-parameters.html#heritabilities",
+    "title": "2  Step 0: genetic parameters and breeding goal",
+    "section": "2.2 Heritabilities",
+    "text": "2.2 Heritabilities\nBreed-specific values were used where published.\n\n\n\n\n\n\n\n\n\n\nTrait\nHOL\nRDC\nJER\nSource\n\n\n\n\nMY\n0.430\n0.390\n0.440\nNAV routine genetic evaluation, May 2024, Tables 4.1-4.3\n\n\nPY\n0.350\n0.330\n0.380\nNAV routine genetic evaluation, May 2024, Tables 4.1-4.3\n\n\nSF\n0.230\n0.230\n0.230\nLidauer et al. 2023, Animal 17:100917, Table 2 (ReFI h2 0.23, SE 0.06)\n\n\nSCS\n0.095\n0.115\n0.095\nVargas Jurado et al. 2026, J Dairy Sci 109:6387-6400; NAV May 2024 Sec. 8 (0.08-0.15)\n\n\nLNVAR\n0.220\n0.220\n0.220\nPoppe, Mulder & Veerkamp, ADSA 2019 abstract #286\n\n\nICF\n0.050\n0.040\n0.040\nNAV routine genetic evaluation, May 2024, Table 6.x\n\n\nLONG\n0.056\n0.056\n0.056\nClasen et al. 2017 as tabulated in Hu et al. 2021, Front Genet 12:695543\n\n\nMUN\n0.220\n0.240\n0.180\nBuitenhuis & Poulsen 2023, J Dairy Sci 106:5562-5569, Table 2 (SE 0.004 / 0.01 / 0.01)\n\n\nNUE\n0.130\n0.130\n0.130\nChen et al. 2021, J Dairy Sci 104:4413-4423\n\n\nCH4\n0.175\n0.175\n0.175\nSchneider et al. 2025, J Dairy Sci 108:12519-12530, Table 2 (PP 0.19 SE 0.03; MLP 0.16 SE 0.02)\n\n\nFY\n0.360\n0.340\n0.350\nNAV routine genetic evaluation, May 2024, Tables 4.1-4.3",
+    "crumbs": [
+      "The pipeline, step by step",
+      "<span class='chapter-number'>2</span>  <span class='chapter-title'>Step 0: genetic parameters and breeding goal</span>"
+    ]
+  },
+  {
+    "objectID": "book/02-parameters.html#genetic-correlations",
+    "href": "book/02-parameters.html#genetic-correlations",
+    "title": "2  Step 0: genetic parameters and breeding goal",
+    "section": "2.3 Genetic correlations",
+    "text": "2.3 Genetic correlations\n\n40 of 55 trait pairs have a published source. Index-based values were accepted only from Nordic breeds, genuine estimates from European studies, and recent estimates over old ones. The evidence for every pair is in the evidence workbook.\nThe other 15 pairs take the values implied by weighted bending (Jorjani et al. 2003). Bending makes the matrix positive definite, which the simulation needs, while moving published values by at most about 0.015. These 15 values are not estimates.\nThe NUE correlations (milk yield 0.52, protein yield 0.80, milk urea -0.12) all come from one study of grazing Irish cows (Tavernier et al. 2024). This is the weakest input, so Chapter 9 tests how much the conclusions depend on it.\n\n\n\n\n\n\n\nWarningWhy ordinary bending was not used\n\n\n\nOrdinary bending shrinks every correlation by the same rule. It would have moved the published milk-protein correlation from 0.86 to 0.74. Weighted bending keeps published values almost fixed and moves the unknown ones instead.",
+    "crumbs": [
+      "The pipeline, step by step",
+      "<span class='chapter-number'>2</span>  <span class='chapter-title'>Step 0: genetic parameters and breeding goal</span>"
+    ]
+  },
+  {
+    "objectID": "book/02-parameters.html#the-breeding-goal",
+    "href": "book/02-parameters.html#the-breeding-goal",
+    "title": "2  Step 0: genetic parameters and breeding goal",
+    "section": "2.4 The breeding goal",
+    "text": "2.4 The breeding goal\nThe NTM sub-index weights (May 2026) were used for the sub-indices that have a simulated trait. These carry 64% of the NTM weight for HOL and RDC and 72% for JER; the rest is not simulated. NUE has no published economic value, so two weights were tested on top of NTM: 0.35 (equal to the Saved Feed weight) and 0.75.\nFull report: Step 0, genetic parameters. The check of the correlation update is in the update-check report.",
+    "crumbs": [
+      "The pipeline, step by step",
+      "<span class='chapter-number'>2</span>  <span class='chapter-title'>Step 0: genetic parameters and breeding goal</span>"
+    ]
+  },
+  {
+    "objectID": "book/03-founders.html",
+    "href": "book/03-founders.html",
+    "title": "3  Step 1: founder genomes and burn-in",
+    "section": "",
+    "text": "3.1 Why this step matters\nGenomic selection works through linkage disequilibrium between markers and causal loci, and through family structure. If the starting population were a random sample, genomic prediction would look better or worse than it really is. The start population must look like a selected cattle population.",
+    "crumbs": [
+      "The pipeline, step by step",
+      "<span class='chapter-number'>3</span>  <span class='chapter-title'>Step 1: founder genomes and burn-in</span>"
+    ]
+  },
+  {
+    "objectID": "book/03-founders.html#key-choices",
+    "href": "book/03-founders.html#key-choices",
+    "title": "3  Step 1: founder genomes and burn-in",
+    "section": "3.2 Key choices",
+    "text": "3.2 Key choices\n\nCoalescent founders. Genomes come from MaCS with the cattle demography in AlphaSimR (current effective population size 90; MacLeod et al. 2013), extended to three breeds: the HOL and RDC lineages join 30 generations ago and JER 50 generations ago. These split times are not calibrated to an observed FST.\nGenome size. 29 chromosomes (the bovine autosomes), so that genome length is realistic, with 10,005 SNP and 600 founders per breed. The SNP number was chosen to fit a 2-core, 6 GB machine; a 50k version is in the hpc/ folder.\nHerds. Single-breed herds, as on CFIT farms.\nBurn-in. Selection on milk and protein yield, to reproduce historical yield selection before NUE is considered.\nReplicates. Each replicate uses seed 20261031 plus the replicate number and draws its own founders, so the spread between replicates includes founder sampling.\n\n\n\n\n\n\n\nTipPaired comparisons\n\n\n\nWithin a replicate, every breeding scenario starts from the same founders, burn-in and random seed. A difference between two scenarios is therefore paired, which removes much of the noise when they are compared in Chapter 8.\n\n\nFull report: Step 1, founders and burn-in.",
+    "crumbs": [
+      "The pipeline, step by step",
+      "<span class='chapter-number'>3</span>  <span class='chapter-title'>Step 1: founder genomes and burn-in</span>"
+    ]
+  },
+  {
+    "objectID": "book/04-prediction.html",
+    "href": "book/04-prediction.html",
+    "title": "4  Step 2: genomic prediction",
+    "section": "",
+    "text": "4.1 The models",
+    "crumbs": [
+      "The pipeline, step by step",
+      "<span class='chapter-number'>4</span>  <span class='chapter-title'>Step 2: genomic prediction</span>"
+    ]
+  },
+  {
+    "objectID": "book/04-prediction.html#the-models",
+    "href": "book/04-prediction.html#the-models",
+    "title": "4  Step 2: genomic prediction",
+    "section": "",
+    "text": "Model\nIdea\n\n\n\n\nABLUP\nPedigree only (baseline)\n\n\nGBLUP\nGenomic relationships, many small effects\n\n\nssGBLUP\nSingle-step: genotyped and non-genotyped animals together, pooled\n\n\nssGBLUP_MF\nSingle-step with breed metafounders\n\n\nwssGBLUP\nWeighted single-step\n\n\nrrBLUP\nRidge regression on SNP effects\n\n\nBayesA, BayesB\nAllow some SNP to have large effects",
+    "crumbs": [
+      "The pipeline, step by step",
+      "<span class='chapter-number'>4</span>  <span class='chapter-title'>Step 2: genomic prediction</span>"
+    ]
+  },
+  {
+    "objectID": "book/04-prediction.html#how-accuracy-was-measured",
+    "href": "book/04-prediction.html#how-accuracy-was-measured",
+    "title": "4  Step 2: genomic prediction",
+    "section": "4.2 How accuracy was measured",
+    "text": "4.2 How accuracy was measured\n\nValidation. Three-fold cross-validation, plus forward validation in which the youngest cows are predicted from older ones.\nAccuracy is the correlation between the estimated and the true breeding value. Only a simulation knows the true value.\nWithin-breed accuracy is reported, because selection happens within breed. Pooled accuracy is distorted by differences between breed means.\n\n\n\n\n\n\n\nWarningSingle-step in a multi-breed population\n\n\n\nThe genomic (G) and pedigree (A22) relationship matrices have different bases. Without adjustment, single-step GBLUP gives breed-level offsets in the breeding values. The pipeline tests an adjusted G and breed metafounders (Vitezica et al. 2011; Legarra et al. 2015).",
+    "crumbs": [
+      "The pipeline, step by step",
+      "<span class='chapter-number'>4</span>  <span class='chapter-title'>Step 2: genomic prediction</span>"
+    ]
+  },
+  {
+    "objectID": "book/04-prediction.html#what-it-found",
+    "href": "book/04-prediction.html#what-it-found",
+    "title": "4  Step 2: genomic prediction",
+    "section": "4.3 What it found",
+    "text": "4.3 What it found\nMean within-breed accuracy of each model (forward and k-fold validation):\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nmodel\nCH4_forward\nCH4_k-fold\nMUN_forward\nMUN_k-fold\nNUE_forward\nNUE_k-fold\nSF_forward\nSF_k-fold\n\n\n\n\nABLUP\n0.19\n0.24\n0.25\n0.32\n0.15\n0.25\n0.22\n0.29\n\n\nBayesA\n0.19\n0.18\n0.20\n0.23\n0.12\n0.25\n0.19\n0.21\n\n\nBayesB\n0.16\n0.18\n0.21\n0.23\n0.10\n0.23\n0.18\n0.21\n\n\nGBLUP\n0.19\n0.18\n0.21\n0.24\n0.11\n0.25\n0.18\n0.21\n\n\nrrBLUP\n0.19\n0.18\n0.21\n0.24\n0.11\n0.25\n0.18\n0.21\n\n\nssGBLUP\n0.21\n0.26\n0.28\n0.34\n0.15\n0.29\n0.24\n0.30\n\n\nssGBLUP_MF\n0.21\n0.26\n0.28\n0.34\n0.15\n0.29\n0.24\n0.30\n\n\nwssGBLUP\n0.11\n0.16\n0.19\n0.21\n0.09\n0.17\n0.15\n0.18\n\n\n\nA single-step model was the best or within 0.05 of the best in 10 of 10 trait x validation comparisons. Differences below about 0.05 are within fold-to-fold noise. Weighted single-step gave over-dispersed breeding values.\nFull reports: NUE, milk urea, Saved Feed, methane.",
+    "crumbs": [
+      "The pipeline, step by step",
+      "<span class='chapter-number'>4</span>  <span class='chapter-title'>Step 2: genomic prediction</span>"
+    ]
+  },
+  {
+    "objectID": "book/05-multitrait-gxe.html",
+    "href": "book/05-multitrait-gxe.html",
+    "title": "5  Step 3: multi-trait models and genotype x country interaction",
+    "section": "",
+    "text": "5.1 Multi-trait models\nNUE is expensive to record. If it is genetically correlated with traits that are recorded routinely, those traits can carry information to cows without NUE records. The step fits 11-trait Bayesian models with three structures for the genetic covariances: diagonal (no correlations), unstructured, and factor-analytic.\nFor cows whose NUE was hidden, NUE accuracy was 0.09 with the unstructured model against 0.01 with the diagonal model. Only the unstructured model gained from the correlations.",
+    "crumbs": [
+      "The pipeline, step by step",
+      "<span class='chapter-number'>5</span>  <span class='chapter-title'>Step 3: multi-trait models and genotype x country interaction</span>"
+    ]
+  },
+  {
+    "objectID": "book/05-multitrait-gxe.html#multi-trait-models",
+    "href": "book/05-multitrait-gxe.html#multi-trait-models",
+    "title": "5  Step 3: multi-trait models and genotype x country interaction",
+    "section": "",
+    "text": "NoteToo few cows for 11 traits\n\n\n\nWith 1,500 cows, the 11-trait covariance matrix could not be estimated well: heritabilities were pulled towards the prior and genetic correlations shrunk towards zero, although their pattern was recovered. That is one reason why the real CFIT data, with tens of thousands of cows, matter.",
+    "crumbs": [
+      "The pipeline, step by step",
+      "<span class='chapter-number'>5</span>  <span class='chapter-title'>Step 3: multi-trait models and genotype x country interaction</span>"
+    ]
+  },
+  {
+    "objectID": "book/05-multitrait-gxe.html#genotype-x-country-interaction",
+    "href": "book/05-multitrait-gxe.html#genotype-x-country-interaction",
+    "title": "5  Step 3: multi-trait models and genotype x country interaction",
+    "section": "5.2 Genotype x country interaction",
+    "text": "5.2 Genotype x country interaction\nOne joint evaluation is valid only if the genetic correlation of a trait between countries is high. A correlation below about 0.80 means that bulls re-rank between countries.\n\nDecision rule. GxE is declared only if the likelihood-ratio test has p &lt; 0.05 and the upper 95% limit of the between-country correlation is below 0.80.\nNegative control. A dataset simulated without GxE is always analysed as well, to check that the rule does not raise false alarms.\nBayesian check. The same model is fitted with two opposite priors (correlation 0 and 0.95). If the answer follows the prior, the data are uninformative.\n\nResults of the compound-symmetry model:\n\n\n\nData\nTrait\nLRT p\nEstimated r_g\nSE\nTrue r_g\n\n\n\n\nNo GxE simulated (control)\nMY\n0.089\n0.643\n0.396\n1.000\n\n\nNo GxE simulated (control)\nNUE\n0.078\n0.525\n0.599\n1.000\n\n\nGxE simulated (r_g = 0.9)\nMY\n0.018\n0.494\n0.448\n0.900\n\n\nGxE simulated (r_g = 0.9)\nNUE\n0.126\n0.125\n1.294\n0.893\n\n\n\nNo false GxE was declared on the control data. With a true between-country correlation of 0.9, the estimates were uninformative (standard errors 0.40 to 1.29), and the Bayesian answer followed the prior. The recommendation is therefore one joint evaluation, unless real data show a correlation credibly below 0.80.\nFull reports: multi-trait models, GxE control data, GxE data with rg = 0.9.",
+    "crumbs": [
+      "The pipeline, step by step",
+      "<span class='chapter-number'>5</span>  <span class='chapter-title'>Step 3: multi-trait models and genotype x country interaction</span>"
+    ]
+  },
+  {
+    "objectID": "book/06-programme.html",
+    "href": "book/06-programme.html",
+    "title": "6  Step 4: the breeding programme",
+    "section": "",
+    "text": "6.1 The scenarios",
+    "crumbs": [
+      "The pipeline, step by step",
+      "<span class='chapter-number'>6</span>  <span class='chapter-title'>Step 4: the breeding programme</span>"
+    ]
+  },
+  {
+    "objectID": "book/06-programme.html#the-scenarios",
+    "href": "book/06-programme.html#the-scenarios",
+    "title": "6  Step 4: the breeding programme",
+    "section": "",
+    "text": "Scenario\nIndex\nWhat it tests\n\n\n\n\nPHENO\nNTM, phenotypic selection\nBaseline without genomics\n\n\nGS_NTM\nNTM\nThe current breeding goal\n\n\nGS_NTM_NUE35\nNTM + NUE 0.35\nA moderate NUE weight\n\n\nGS_NTM_NUE75\nNTM + NUE 0.75\nA strong NUE weight\n\n\nGS_NTM_NUE35_MUN\nNUE 0.35 + milk urea -0.35\nDoes selecting against milk urea help?\n\n\nGS_NTM_NUE75_CH4\nNUE 0.75 + methane -0.5\nThe cost of also reducing methane\n\n\nGS_NTM_NUE35_OCS_dF1\nNUE 0.35 with optimum contribution selection\nInbreeding held at 1% per generation\n\n\nGS_NTM_NUE35_MATE\nNUE 0.35 with mate allocation\nMatings limited to F &lt; 6%",
+    "crumbs": [
+      "The pipeline, step by step",
+      "<span class='chapter-number'>6</span>  <span class='chapter-title'>Step 4: the breeding programme</span>"
+    ]
+  },
+  {
+    "objectID": "book/06-programme.html#key-choices",
+    "href": "book/06-programme.html#key-choices",
+    "title": "6  Step 4: the breeding programme",
+    "section": "6.2 Key choices",
+    "text": "6.2 Key choices\n\nEvaluation model. SNP-BLUP, solved in its n x n (dual) form to save memory. 04b_model_test.Rmd was designed to compare it with single-step GBLUP inside the programme, but single-step exceeded the memory of the machine used.\nTraining set. About 6,000 genotyped and phenotyped cows per generation.\nMethane weight. -0.5 is the knee of a selection-index sweep in Step 0: the largest methane reduction per unit of NTM given up.\nRecorded every generation. Genetic trends, accuracy of the breeding values, the four-path breeder’s equation, and genomic inbreeding.\n\n\n\n\n\n\n\nTipOptimum contribution selection\n\n\n\nOptimum contribution selection chooses how many offspring each bull may have, so that genetic gain is as high as possible while the rate of inbreeding stays at a set limit, here 1% per generation (the FAO guideline).\n\n\nFull reports (replicate 0): NTM, NTM + NUE 0.35, NTM + NUE 0.75, milk urea, methane, optimum contribution, mate allocation, phenotypic selection, model test.",
+    "crumbs": [
+      "The pipeline, step by step",
+      "<span class='chapter-number'>6</span>  <span class='chapter-title'>Step 4: the breeding programme</span>"
+    ]
+  },
+  {
+    "objectID": "book/07-results.html",
+    "href": "book/07-results.html",
+    "title": "7  Responses and trade-offs",
+    "section": "",
+    "text": "7.1 All scenarios side by side\nMean responses per breed:",
+    "crumbs": [
+      "Results",
+      "<span class='chapter-number'>7</span>  <span class='chapter-title'>Responses and trade-offs</span>"
+    ]
+  },
+  {
+    "objectID": "book/07-results.html#all-scenarios-side-by-side",
+    "href": "book/07-results.html#all-scenarios-side-by-side",
+    "title": "7  Responses and trade-offs",
+    "section": "",
+    "text": "Figure 7.1: Change in NUE, NTM value, methane, milk urea, protein yield and the rate of inbreeding under each programme. Points are means over 10 replicates; bars are plus or minus one standard deviation.\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nbreed\ntrait\nNTM\nNTM + NUE 0.35\nNTM + NUE 0.75\nNUE 0.35 + MUN\nNUE 0.75 + CH4\nNUE 0.35 + OCS\n\n\n\n\nHOL\nCH4\n1.89\n2.49\n2.13\n1.99\n0.54\n1.83\n\n\nHOL\nMUN\n1.04\n0.91\n0.50\n-0.51\n0.38\n0.87\n\n\nHOL\nNUE\n3.40\n4.48\n4.83\n4.53\n4.55\n4.35\n\n\nHOL\nNTM\n59.22\n63.91\n59.04\n58.88\n55.05\n60.03\n\n\nHOL\ndF\n1.54\n1.76\n1.73\n1.73\n1.69\n0.74\n\n\nJER\nCH4\n1.60\n1.94\n1.65\n1.72\n0.17\n1.46\n\n\nJER\nMUN\n0.86\n0.86\n0.62\n-0.49\n0.39\n1.17\n\n\nJER\nNUE\n3.40\n4.34\n4.35\n4.11\n4.19\n3.63\n\n\nJER\nNTM\n56.94\n57.45\n54.09\n53.56\n50.55\n53.75\n\n\nJER\ndF\n2.22\n2.25\n2.33\n2.23\n1.88\n0.96\n\n\nRDC\nCH4\n2.10\n2.12\n2.02\n2.00\n0.59\n2.08\n\n\nRDC\nMUN\n0.69\n0.75\n0.50\n-0.49\n0.19\n0.56\n\n\nRDC\nNUE\n3.32\n4.14\n4.52\n4.19\n4.36\n3.96\n\n\nRDC\nNTM\n61.53\n63.55\n62.34\n58.86\n58.35\n60.26\n\n\nRDC\ndF\n1.99\n1.95\n2.16\n1.85\n1.92\n0.94",
+    "crumbs": [
+      "Results",
+      "<span class='chapter-number'>7</span>  <span class='chapter-title'>Responses and trade-offs</span>"
+    ]
+  },
+  {
+    "objectID": "book/07-results.html#nue-over-time",
+    "href": "book/07-results.html#nue-over-time",
+    "title": "7  Responses and trade-offs",
+    "section": "7.2 NUE over time",
+    "text": "7.2 NUE over time\n\n\n\n\n\n\nFigure 7.2: NUE genetic gain from the start of genomic selection under NTM alone and with an NUE weight of 0.35 or 0.75. Lines are means over 10 replicates; ribbons are 95% confidence intervals.",
+    "crumbs": [
+      "Results",
+      "<span class='chapter-number'>7</span>  <span class='chapter-title'>Responses and trade-offs</span>"
+    ]
+  },
+  {
+    "objectID": "book/07-results.html#what-the-figures-show",
+    "href": "book/07-results.html#what-the-figures-show",
+    "title": "7  Responses and trade-offs",
+    "section": "7.3 What the figures show",
+    "text": "7.3 What the figures show\n\nNTM alone already raises NUE (by 3.3 to 3.4 SD), carried by protein yield, whose genetic correlation with NUE is 0.80.\nAn NUE weight adds more. At weight 0.35 NUE rises by a further HOL 1.08, JER 0.94 and RDC 0.82 SD.\nMethane rises under NTM alone (HOL 1.89, JER 1.60, RDC 2.10 SD), through its positive genetic correlations with yield. NTM has no methane weight. The methane weight reverses most of this rise.\nA milk urea weight lowers milk urea but not NUE. This agrees with the weak genetic correlation between the two (-0.12).\nOptimum contribution selection halves the rate of inbreeding, from about 1.8 to 2.2% to 0.7 to 1.0% per generation.\n\n\n\n\n\n\n\nFigure 7.3: Genomic inbreeding under NTM + NUE 0.35 with and without optimum contribution selection (mean of 10 replicates).\n\n\n\n\n\n\n\n\n\nNoteSimulation and theory agree for NUE\n\n\n\nThe NUE response relative to NTM alone was compared with selection-index theory. At weight 0.35 they agree closely (HOL 1.32 in the simulation against 1.32 in theory). At 0.75 the simulated gain is smaller than theory, which is consistent with NUE breeding values being less accurate than protein-yield breeding values, whereas theory assumes true breeding values.",
+    "crumbs": [
+      "Results",
+      "<span class='chapter-number'>7</span>  <span class='chapter-title'>Responses and trade-offs</span>"
+    ]
+  },
+  {
+    "objectID": "book/08-statistics.html",
+    "href": "book/08-statistics.html",
+    "title": "8  Statistics and multiple testing",
+    "section": "",
+    "text": "8.1 Paired tests\nWithin a replicate, all programmes share the same founders, burn-in and random seed. The difference between two programmes is therefore computed within each replicate and tested with a paired t-test over the 10 replicates, once per breed.",
+    "crumbs": [
+      "Results",
+      "<span class='chapter-number'>8</span>  <span class='chapter-title'>Statistics and multiple testing</span>"
+    ]
+  },
+  {
+    "objectID": "book/08-statistics.html#why-correction-is-needed",
+    "href": "book/08-statistics.html#why-correction-is-needed",
+    "title": "8  Statistics and multiple testing",
+    "section": "8.2 Why correction is needed",
+    "text": "8.2 Why correction is needed\nStep 5 runs 120 paired tests (5 comparisons x 8 measures x 3 breeds). Even if no programme differed, about 6 tests would fall below p = 0.05 by chance. Every test is therefore reported three ways.\n\n\n\n\n\n\n\n\nMethod\nControls\nTests significant at 5% (of 120)\n\n\n\n\nUncorrected p-value\nThe error rate of each single test\n57\n\n\nBenjamini-Hochberg\nThe false discovery rate: the expected share of false results among those declared significant\n42\n\n\nBonferroni\nThe family-wise error rate: the chance of even one false result\n15\n\n\n\nPer comparison:\n\n\n\nComparison\nUncorrected\nBenjamini-Hochberg\nBonferroni\n\n\n\n\nGS_NTM_NUE35 - GS_NTM\n12\n9\n1\n\n\nGS_NTM_NUE75 - GS_NTM\n10\n7\n4\n\n\nGS_NTM_NUE35_MUN - GS_NTM_NUE35\n8\n6\n2\n\n\nGS_NTM_NUE75_CH4 - GS_NTM_NUE75\n14\n11\n5\n\n\nGS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35\n13\n9\n3\n\n\nAll comparisons (120 tests)\n57\n42\n15",
+    "crumbs": [
+      "Results",
+      "<span class='chapter-number'>8</span>  <span class='chapter-title'>Statistics and multiple testing</span>"
+    ]
+  },
+  {
+    "objectID": "book/08-statistics.html#the-headline-results-under-each-method",
+    "href": "book/08-statistics.html#the-headline-results-under-each-method",
+    "title": "8  Statistics and multiple testing",
+    "section": "8.3 The headline results under each method",
+    "text": "8.3 The headline results under each method\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nComparison\nTrait\nBreed\nMean difference\np (uncorrected)\np (BH)\nSignificant: uncorrected\nBH\nBonferroni\n\n\n\n\nGS_NTM_NUE35 - GS_NTM\nNUE\nHOL\n1.081\n0.000\n0.000\nyes\nyes\nyes\n\n\nGS_NTM_NUE35 - GS_NTM\nNUE\nJER\n0.936\n0.001\n0.009\nyes\nyes\nno\n\n\nGS_NTM_NUE35 - GS_NTM\nNUE\nRDC\n0.818\n0.003\n0.014\nyes\nyes\nno\n\n\nGS_NTM_NUE75 - GS_NTM\nNUE\nHOL\n1.426\n0.000\n0.000\nyes\nyes\nyes\n\n\nGS_NTM_NUE75 - GS_NTM\nNUE\nJER\n0.947\n0.002\n0.009\nyes\nyes\nno\n\n\nGS_NTM_NUE75 - GS_NTM\nNUE\nRDC\n1.199\n0.000\n0.000\nyes\nyes\nyes\n\n\nGS_NTM_NUE35_MUN - GS_NTM_NUE35\nNUE\nHOL\n0.051\n0.720\n0.840\nno\nno\nno\n\n\nGS_NTM_NUE35_MUN - GS_NTM_NUE35\nNUE\nJER\n-0.223\n0.370\n0.530\nno\nno\nno\n\n\nGS_NTM_NUE35_MUN - GS_NTM_NUE35\nNUE\nRDC\n0.053\n0.660\n0.790\nno\nno\nno\n\n\nGS_NTM_NUE35_MUN - GS_NTM_NUE35\nMUN\nHOL\n-1.421\n0.000\n0.001\nyes\nyes\nyes\n\n\nGS_NTM_NUE35_MUN - GS_NTM_NUE35\nMUN\nJER\n-1.343\n0.000\n0.001\nyes\nyes\nyes\n\n\nGS_NTM_NUE35_MUN - GS_NTM_NUE35\nMUN\nRDC\n-1.244\n0.000\n0.003\nyes\nyes\nno\n\n\nGS_NTM_NUE75_CH4 - GS_NTM_NUE75\nCH4\nHOL\n-1.584\n0.000\n0.000\nyes\nyes\nyes\n\n\nGS_NTM_NUE75_CH4 - GS_NTM_NUE75\nCH4\nJER\n-1.483\n0.000\n0.000\nyes\nyes\nyes\n\n\nGS_NTM_NUE75_CH4 - GS_NTM_NUE75\nCH4\nRDC\n-1.430\n0.000\n0.000\nyes\nyes\nyes\n\n\nGS_NTM_NUE35 - GS_NTM\nNTM\nHOL\n4.686\n0.038\n0.086\nyes\nno\nno\n\n\nGS_NTM_NUE35 - GS_NTM\nNTM\nJER\n0.502\n0.790\n0.850\nno\nno\nno\n\n\nGS_NTM_NUE35 - GS_NTM\nNTM\nRDC\n2.020\n0.260\n0.420\nno\nno\nno\n\n\nGS_NTM_NUE75 - GS_NTM\nNTM\nHOL\n-0.183\n0.850\n0.880\nno\nno\nno\n\n\nGS_NTM_NUE75 - GS_NTM\nNTM\nJER\n-2.857\n0.041\n0.090\nyes\nno\nno\n\n\nGS_NTM_NUE75 - GS_NTM\nNTM\nRDC\n0.812\n0.610\n0.760\nno\nno\nno\n\n\nGS_NTM_NUE35_MUN - GS_NTM_NUE35\nNTM\nHOL\n-5.026\n0.037\n0.086\nyes\nno\nno\n\n\nGS_NTM_NUE35_MUN - GS_NTM_NUE35\nNTM\nJER\n-3.886\n0.086\n0.160\nno\nno\nno\n\n\nGS_NTM_NUE35_MUN - GS_NTM_NUE35\nNTM\nRDC\n-4.689\n0.042\n0.090\nyes\nno\nno\n\n\nGS_NTM_NUE75_CH4 - GS_NTM_NUE75\nNTM\nHOL\n-3.984\n0.000\n0.003\nyes\nyes\nno\n\n\nGS_NTM_NUE75_CH4 - GS_NTM_NUE75\nNTM\nJER\n-3.540\n0.015\n0.044\nyes\nyes\nno\n\n\nGS_NTM_NUE75_CH4 - GS_NTM_NUE75\nNTM\nRDC\n-3.985\n0.036\n0.085\nyes\nno\nno\n\n\nGS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35\nNTM\nHOL\n-3.881\n0.042\n0.090\nyes\nno\nno\n\n\nGS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35\nNTM\nJER\n-3.693\n0.033\n0.078\nyes\nno\nno\n\n\nGS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35\nNTM\nRDC\n-3.283\n0.044\n0.093\nyes\nno\nno\n\n\nGS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35\ndF\nHOL\n-0.010\n0.000\n0.000\nyes\nyes\nyes\n\n\nGS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35\ndF\nJER\n-0.013\n0.000\n0.000\nyes\nyes\nyes\n\n\nGS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35\ndF\nRDC\n-0.010\n0.000\n0.000\nyes\nyes\nyes",
+    "crumbs": [
+      "Results",
+      "<span class='chapter-number'>8</span>  <span class='chapter-title'>Statistics and multiple testing</span>"
+    ]
+  },
+  {
+    "objectID": "book/08-statistics.html#which-method-to-read",
+    "href": "book/08-statistics.html#which-method-to-read",
+    "title": "8  Statistics and multiple testing",
+    "section": "8.4 Which method to read",
+    "text": "8.4 Which method to read\n\n\n\n\n\n\nTipBenjamini-Hochberg is the preferred reading\n\n\n\nThe study screens many differences rather than confirming one hypothesis, the tests are dependent (the same replicates, correlated traits), and there are only 10 replicates. Bonferroni would hide real differences; uncorrected p-values overstate the evidence. Bonferroni is kept as the conservative bound: a result that passes it is beyond reasonable doubt in this simulation.\n\n\nBenjamini-Hochberg is proven for independent or positively dependent tests (Benjamini & Hochberg 1995; Benjamini & Yekutieli 2001); it is not guaranteed under every form of dependence.\nWhat changes after correction. The NUE gains, the methane, milk urea and inbreeding effects all hold. The NTM costs of optimum contribution selection and of the milk urea weight, and the apparent NTM gain in Holstein at NUE weight 0.35, do not. They should be read as not established.\nAll adjusted p-values are in the multiple-testing table and in Tables A to E of the summary report.",
+    "crumbs": [
+      "Results",
+      "<span class='chapter-number'>8</span>  <span class='chapter-title'>Statistics and multiple testing</span>"
+    ]
+  },
+  {
+    "objectID": "book/09-sensitivity.html",
+    "href": "book/09-sensitivity.html",
+    "title": "9  Sensitivity analyses",
+    "section": "",
+    "text": "9.1 How to read it",
+    "crumbs": [
+      "Results",
+      "<span class='chapter-number'>9</span>  <span class='chapter-title'>Sensitivity analyses</span>"
+    ]
+  },
+  {
+    "objectID": "book/09-sensitivity.html#how-to-read-it",
+    "href": "book/09-sensitivity.html#how-to-read-it",
+    "title": "9  Sensitivity analyses",
+    "section": "",
+    "text": "Left panel. As the NUE correlations shrink towards zero, the NUE gain under NTM alone falls to about zero. NTM improves NUE only through those correlations.\nRight panel. The extra NUE from an explicit weight stays positive in every set, including when NUE is unrelated to every other trait (HOL +1.56 SD).\n\n\n\n\n\n\n\nImportantThe conclusion\n\n\n\nThe recommendation to add an NUE weight does not depend on the uncertain NUE correlations. The statement that NTM already improves NUE does.",
+    "crumbs": [
+      "Results",
+      "<span class='chapter-number'>9</span>  <span class='chapter-title'>Sensitivity analyses</span>"
+    ]
+  },
+  {
+    "objectID": "book/10-plan.html",
+    "href": "book/10-plan.html",
+    "title": "10  Recommended breeding plan and limitations",
+    "section": "",
+    "text": "10.1 The plan",
+    "crumbs": [
+      "Results",
+      "<span class='chapter-number'>10</span>  <span class='chapter-title'>Recommended breeding plan and limitations</span>"
+    ]
+  },
+  {
+    "objectID": "book/10-plan.html#the-plan",
+    "href": "book/10-plan.html#the-plan",
+    "title": "10  Recommended breeding plan and limitations",
+    "section": "",
+    "text": "Evaluation. A single-step model for routine evaluation, because it uses cows with CFIT records but no genotypes. In a multi-breed population, the genomic and pedigree relationships must be made compatible first (adjusted G or breed metafounders). Weighted single-step should not be used, because its breeding values were over-dispersed.\nSelection index. Add an explicit NUE weight to NTM. NTM alone improves NUE only through its correlations with yield; an explicit weight adds about 0.8 to 1.1 SD more at weight 0.35. Which weight to use is a price decision for the breeding organisation; because the simulated NTM cost is within noise, the cost should be priced from selection-index theory.\nNo milk urea weight, unless urinary nitrogen or ammonia gets its own value in the breeding goal. A milk urea weight lowered milk urea but did not raise NUE.\nMethane. A methane weight of -0.5 reverses most of the rise in methane under NTM, at a cost in NTM value.\nOne joint evaluation across Denmark, Sweden, Finland and Germany, unless a GxE analysis on real data shows a between-country correlation credibly below 0.80.\nOptimum contribution selection at 1% inbreeding per generation. Mate allocation alone lowered final inbreeding but left the rate at 0.8 to 1.2% per generation, above the guideline.\nRecords. CFIT feed intake for nitrogen intake, plus milk protein and milk urea from routine recording. Predicted NUE is the realistic phenotype; measured urinary nitrogen is not available at scale.",
+    "crumbs": [
+      "Results",
+      "<span class='chapter-number'>10</span>  <span class='chapter-title'>Recommended breeding plan and limitations</span>"
+    ]
+  },
+  {
+    "objectID": "book/10-plan.html#limitations",
+    "href": "book/10-plan.html#limitations",
+    "title": "10  Recommended breeding plan and limitations",
+    "section": "10.2 Limitations",
+    "text": "10.2 Limitations\n\n15 of 55 genetic correlations are implied by bending, not estimated, and many sourced values are proxies or come from other breeds.\nAll NUE correlations come from one grazing Irish study; confinement-fed Nordic cows may differ.\nOnly 64 to 72% of the NTM weight is simulated, so absolute EUR values are too large. Comparisons between scenarios are less affected.\n10,005 SNP and a 1,500-cow subsample for genomic cross-validation and GxE, because of computing limits.\nMethane parameters from Danish Holstein are applied to all breeds.\nThe NTM costs of the milk urea weight and of optimum contribution selection do not pass correction for multiple testing; more replicates are needed.",
+    "crumbs": [
+      "Results",
+      "<span class='chapter-number'>10</span>  <span class='chapter-title'>Recommended breeding plan and limitations</span>"
+    ]
+  },
+  {
+    "objectID": "book/10-plan.html#what-real-data-would-add",
+    "href": "book/10-plan.html#what-real-data-would-add",
+    "title": "10  Recommended breeding plan and limitations",
+    "section": "10.3 What real data would add",
+    "text": "10.3 What real data would add\nGenetic correlations of NUE with production, feed efficiency, health, fertility and resilience in Nordic breeds; whether these correlations change across lactation and parity; and GxE estimated on the full population. The pipeline reads all parameters from the params/ folder, so real estimates can replace the literature values directly.\nThe full list of assumptions and the verification log are in the pipeline notes.",
+    "crumbs": [
+      "Results",
+      "<span class='chapter-number'>10</span>  <span class='chapter-title'>Recommended breeding plan and limitations</span>"
+    ]
+  },
+  {
+    "objectID": "book/11-reproduce.html",
+    "href": "book/11-reproduce.html",
+    "title": "11  Reproduce the pipeline",
+    "section": "",
+    "text": "11.1 Requirements\nR 4.3 or later with AlphaSimR, sommer, BGLR, rrBLUP, nadiv, data.table, ggplot2, knitr and rmarkdown. The script hpc/install_packages.R installs them.",
+    "crumbs": [
+      "Use it yourself",
+      "<span class='chapter-number'>11</span>  <span class='chapter-title'>Reproduce the pipeline</span>"
+    ]
+  },
+  {
+    "objectID": "book/11-reproduce.html#run-it",
+    "href": "book/11-reproduce.html#run-it",
+    "title": "11  Reproduce the pipeline",
+    "section": "11.2 Run it",
+    "text": "11.2 Run it\n# Quick check of the whole chain at 5% scale\nRscript -e \"rmarkdown::render('00_genetic_parameters.Rmd')\"\nRscript -e \"rmarkdown::render('01_founders_burnin.Rmd', params = list(run_mode = 'TEST'))\"\n\n# The full run reported here (144 steps, resumable; each finished step leaves logs/&lt;step&gt;.done)\n./queue.sh queue_full_run.txt\n\n# Rebuild the spreadsheet of replicate results\npython3 tools/build_xlsx.py\n\n\n\n\n\n\nNoteHow long it takes\n\n\n\nOn a 2-core, 6 GB machine the full run took about three days: about 80 minutes per founder set, 6 to 9 minutes per burn-in and 24 to 36 minutes per scenario. The 50k-SNP cluster version is in hpc/.",
+    "crumbs": [
+      "Use it yourself",
+      "<span class='chapter-number'>11</span>  <span class='chapter-title'>Reproduce the pipeline</span>"
+    ]
+  },
+  {
+    "objectID": "book/11-reproduce.html#rebuild-this-website",
+    "href": "book/11-reproduce.html#rebuild-this-website",
+    "title": "11  Reproduce the pipeline",
+    "section": "11.3 Rebuild this website",
+    "text": "11.3 Rebuild this website\nThe figures and tables on this site are drawn from the result files by book/make_figures.Rmd. Then Quarto renders the site into docs/:\ncd book && Rscript -e \"rmarkdown::render('make_figures.Rmd')\" && cd ..\nquarto render",
+    "crumbs": [
+      "Use it yourself",
+      "<span class='chapter-number'>11</span>  <span class='chapter-title'>Reproduce the pipeline</span>"
+    ]
+  },
+  {
+    "objectID": "book/11-reproduce.html#repository-layout",
+    "href": "book/11-reproduce.html#repository-layout",
+    "title": "11  Reproduce the pipeline",
+    "section": "11.4 Repository layout",
+    "text": "11.4 Repository layout\n\n\n\n\n\n\n\nFolder or file\nContents\n\n\n\n\n00_genetic_parameters.Rmd to 05_summary.Rmd\nThe pipeline, run in order\n\n\nparams/\nGenetic parameters, index weights, sourcing evidence\n\n\nreports/\nRendered HTML reports\n\n\nresults/\nResult tables of every replicate and sensitivity set, and two workbooks\n\n\ntools/\nScripts that build the workbooks\n\n\nhpc/\nCluster version (50k SNP, 20 replicates)\n\n\nnotes/\nAssumptions and verification log\n\n\nbook/, index.qmd, _quarto.yml\nSource of this website\n\n\ndocs/\nThe rendered website (served by GitHub Pages)\n\n\n\nLarge simulation state files (genomes, phenotypes and pedigrees) are not stored; the code regenerates them from the seeds.",
+    "crumbs": [
+      "Use it yourself",
+      "<span class='chapter-number'>11</span>  <span class='chapter-title'>Reproduce the pipeline</span>"
+    ]
+  },
+  {
+    "objectID": "book/A-reports.html",
+    "href": "book/A-reports.html",
+    "title": "Appendix A — Full reports and downloads",
+    "section": "",
+    "text": "A.1 Downloads\nEach report is the complete rendered R Markdown file, with code and output. Steps 1 and 4 show replicate 0.",
+    "crumbs": [
+      "Appendices",
+      "<span class='chapter-number'>A</span>  <span class='chapter-title'>Full reports and downloads</span>"
+    ]
+  },
+  {
+    "objectID": "book/A-reports.html#downloads",
+    "href": "book/A-reports.html#downloads",
+    "title": "Appendix A — Full reports and downloads",
+    "section": "",
+    "text": "Replicate results workbook (formulas, no typed numbers)\nGenetic correlation evidence workbook\nAll result tables (CSV) are in the results/ folder on GitHub",
+    "crumbs": [
+      "Appendices",
+      "<span class='chapter-number'>A</span>  <span class='chapter-title'>Full reports and downloads</span>"
+    ]
+  },
+  {
+    "objectID": "book/B-references.html",
+    "href": "book/B-references.html",
+    "title": "Appendix B — References",
+    "section": "",
+    "text": "Benjamini, Y., Hochberg, Y. (1995). Controlling the false discovery rate. Journal of the Royal Statistical Society B 57, 289-300.\nBenjamini, Y., Yekutieli, D. (2001). The control of the false discovery rate in multiple testing under dependency. Annals of Statistics 29, 1165-1188.\nBuitenhuis, B., Poulsen, N.A. (2023). Journal of Dairy Science 106, 5562-5569. Milk urea heritability in Danish breeds.\nChen et al. (2021). Journal of Dairy Science 104, 4413-4423. Heritability of predicted NUE.\nJorjani, H., Klei, L., Emanuelson, U. (2003). A simple method for weighted bending of genetic (co)variance matrices. Journal of Dairy Science 86, 677-679.\nLegarra, A. et al. (2015). Metafounders. Genetics 200, 455-468.\nLi, B. et al. (2018). Genetic heterogeneity of feed intake, energy-corrected milk, and body weight across lactation in primiparous Holstein, Nordic Red, and Jersey cows. Journal of Dairy Science 101, 10011-10021.\nLidauer, M.H. et al. (2023). Animal 17, 100917. Residual feed intake in Nordic Red.\nMacLeod, I.M. et al. (2013). Cattle demographic history. Molecular Biology and Evolution 30, 2209-2223.\nSchneider et al. (2025). Journal of Dairy Science 108, 12519-12530. Methane in Danish Holstein.\nTavernier et al. (2024). Journal of Dairy Science 107, 2231-2240. Genetic parameters of NUE.\nVitezica, Z.G. et al. (2011). Compatibility of G and A. Genetics Research 93, 357-366.\n\nThe full source list for every parameter, with DOIs, is in the evidence workbook and in the Step 0 report.",
+    "crumbs": [
+      "Appendices",
+      "<span class='chapter-number'>B</span>  <span class='chapter-title'>References</span>"
+    ]
+  }
+]

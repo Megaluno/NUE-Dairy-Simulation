@@ -1,0 +1,32 @@
+# Step 4: the breeding programme {#sec-programme}
+
+::: {.lead}
+`04_breeding_program.Rmd` runs genomic selection within each breed under eight programmes. Each programme differs from another in one decision only, so the effect of that decision can be isolated.
+:::
+
+## The scenarios
+
+| Scenario | Index | What it tests |
+|---|---|---|
+| `PHENO` | NTM, phenotypic selection | Baseline without genomics |
+| `GS_NTM` | NTM | The current breeding goal |
+| `GS_NTM_NUE35` | NTM + NUE 0.35 | A moderate NUE weight |
+| `GS_NTM_NUE75` | NTM + NUE 0.75 | A strong NUE weight |
+| `GS_NTM_NUE35_MUN` | NUE 0.35 + milk urea -0.35 | Does selecting against milk urea help? |
+| `GS_NTM_NUE75_CH4` | NUE 0.75 + methane -0.5 | The cost of also reducing methane |
+| `GS_NTM_NUE35_OCS_dF1` | NUE 0.35 with optimum contribution selection | Inbreeding held at 1% per generation |
+| `GS_NTM_NUE35_MATE` | NUE 0.35 with mate allocation | Matings limited to F < 6% |
+
+## Key choices
+
+- **Evaluation model.** SNP-BLUP, solved in its n x n (dual) form to save memory. `04b_model_test.Rmd` was designed to compare it with single-step GBLUP inside the programme, but single-step exceeded the memory of the machine used.
+- **Training set.** About 6,000 genotyped and phenotyped cows per generation.
+- **Methane weight.** -0.5 is the knee of a selection-index sweep in Step 0: the largest methane reduction per unit of NTM given up.
+- **Recorded every generation.** Genetic trends, accuracy of the breeding values, the four-path breeder's equation, and genomic inbreeding.
+
+::: {.callout-tip}
+## Optimum contribution selection
+Optimum contribution selection chooses how many offspring each bull may have, so that genetic gain is as high as possible while the rate of inbreeding stays at a set limit, here 1% per generation (the FAO guideline).
+:::
+
+Full reports (replicate 0): [NTM](../reports/04_breeding_program_sim_FULL_rg1.00_GS_NTM.html), [NTM + NUE 0.35](../reports/04_breeding_program_sim_FULL_rg1.00_GS_NTM_NUE35.html), [NTM + NUE 0.75](../reports/04_breeding_program_sim_FULL_rg1.00_GS_NTM_NUE75.html), [milk urea](../reports/04_breeding_program_sim_FULL_rg1.00_GS_NTM_NUE35_MUN.html), [methane](../reports/04_breeding_program_sim_FULL_rg1.00_CH4_KNEE.html), [optimum contribution](../reports/04_breeding_program_sim_FULL_rg1.00_GS_NTM_NUE35_OCS_dF1.html), [mate allocation](../reports/04_breeding_program_sim_FULL_rg1.00_GS_NTM_NUE35_MATE.html), [phenotypic selection](../reports/04_breeding_program_sim_FULL_rg1.00_PHENO.html), [model test](../reports/04b_model_test.html).

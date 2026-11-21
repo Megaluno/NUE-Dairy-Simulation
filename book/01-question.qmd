@@ -1,0 +1,38 @@
+# The question and the population {#sec-question}
+
+::: {.lead}
+This chapter sets out what is being simulated: the breeding goal, the trait of interest, and the size and structure of the population, taken from published CFIT figures.
+:::
+
+## Nitrogen use efficiency and the breeding goal
+
+NUE is the share of nitrogen intake that a cow puts into milk protein. It can be predicted on farm from feed intake, diet crude protein and milk protein, which is why large-scale feed-intake recording makes a genetic evaluation of NUE realistic.
+
+The Nordic Total Merit index (NTM) combines sub-indices for yield, fertility, udder health, longevity, Saved Feed and other traits. It has no weight on NUE, milk urea or methane. The simulation therefore compares the current NTM goal with versions that add NUE, milk urea or methane on top.
+
+## Population sizes
+
+The CFIT cow numbers (28,400 cows across 4 countries) reported in the *Cattle FeedInTake* presentation by Jan Lassen and Søren Borchersen were used ([source](https://www.euholsteins.com/wp-content/uploads/2026/07/3.2.CFIT-Cattle-Feed-InTake-measured-in-commercial-Holstein-herds-with-3D-cameras-Jan-Lassen.pdf)).
+
+These values have similar breed proportions to the ICAR 2026 (Verona) report of 25,614 cows (10,914 Holstein, 7,542 Jersey, 7,158 Red Dairy Cattle) on more than 30 commercial farms in Denmark, Finland, Sweden and Germany, with 1,282,122 weekly records.
+
+Breed sizes reported by VikingGenetics (523,000 Holstein, 121,000 Jersey, 76,000 Red Dairy) were not used: they carry no information on CFIT records, over-weight Holstein (72.6%) relative to the CFIT data (42.6%), and exclude the German data.
+
+| Breed | Cows | Farms | Country known | Remainder |
+|---|---|---|---|---|
+| Red Dairy Cattle | 8,100 | 12 | Finland (500 cows, 2 farms), Sweden (500 cows, 2 farms) | 7,100 cows (8 farms) |
+| Jersey | 8,300 | 11 | none | 8,300 cows (11 farms) |
+| Holstein | 12,000 | 16 | Germany (750 cows, 2 farms) | 11,250 cows (14 farms) |
+
+::: {.callout-note}
+## How the unknown part was allocated
+Neither source gives exact per-country counts. The known data points were kept where they are, and each breed's remainder was split equally over the four countries. The breed labels of the three rows are a mapping: the slide shows the numbers without breed names.
+:::
+
+The 39 reported farms were scaled to 40 herds, each with a single breed, as on CFIT farms. Because herd is nested in breed, later models drop breed as a separate fixed effect.
+
+## Germany and the NAV evaluation
+
+The NAV documentation (May 2024) describes a joint Denmark-Sweden-Finland evaluation. Germany is not part of it, so NAV's assumption of common genetic parameters for all countries does not cover German herds. That makes the genotype x country analysis (@sec-gxe) more relevant for Germany than for the other three countries.
+
+Full report: [Step 0, genetic parameters](../reports/00_genetic_parameters.html).

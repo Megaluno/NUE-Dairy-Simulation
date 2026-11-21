@@ -1,0 +1,158 @@
+---
+title: "Figures and tables for the website"
+output: html_document
+params:
+  res: "../results"
+  img: "../images"
+  inc: "_includes"
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+library(data.table); library(ggplot2)
+R <- normalizePath(params$res); IMG <- params$img; INC <- params$inc
+dir.create(IMG, showWarnings = FALSE); dir.create(INC, showWarnings = FALSE)
+pal <- c(HOL = "#1b6ca8", RDC = "#c0392b", JER = "#d4a017")   # breed colours
+th <- theme_bw(base_size = 12) + theme(legend.position = "bottom", panel.grid.minor = element_blank())
+save_png <- function(p, f, w = 8, h = 4.5) ggsave(file.path(IMG, f), p, width = w, height = h, dpi = 150)
+md_table <- function(d, f, digits = 2) {           # writes a markdown table that the book includes
+  d <- copy(d); for (j in names(d)) if (is.numeric(d[[j]])) set(d, j = j, value = formatC(d[[j]], format = "f", digits = digits))
+  txt <- c(paste0("| ", paste(names(d), collapse = " | "), " |"), paste0("|", paste(rep("---", ncol(d)), collapse = "|"), "|"),
+           apply(d, 1, function(r) paste0("| ", paste(r, collapse = " | "), " |")))
+  writeLines(txt, file.path(INC, f))
+}
+scen_lab <- c(GS_NTM = "NTM", GS_NTM_NUE35 = "NTM + NUE 0.35", GS_NTM_NUE75 = "NTM + NUE 0.75",
+              GS_NTM_NUE35_MUN = "NUE 0.35 + MUN", GS_NTM_NUE75_CH4 = "NUE 0.75 + CH4",
+              GS_NTM_NUE35_OCS_dF1 = "NUE 0.35 + OCS")
+```
+
+## Heritabilities used
+
+```{r h2}
+h2 <- fread("../params/h2.csv")
+md_table(h2[, .(Trait = code, HOL, RDC, JER, Source = source)], "h2.md", 3)
+```
+
+## Response over 10 generations, mean and SD over 10 replicates
+
+```{r response}
+resp <- fread(file.path(R, "sim_FULL_rg1.00/replicate_response_long.csv"))
+dF <- fread(file.path(R, "sim_FULL_rg1.00/replicate_dF.csv"))
+long <- rbind(resp[, .(scenario, replicate, breed, trait, value = response)],
+              melt(dF[, .(scenario, replicate, breed, NTM, dF = 100 * dF)], id.vars = c("scenario", "replicate", "breed"),
+                   variable.name = "trait", value.name = "value"))
+s <- long[, .(mean = mean(value), sd = sd(value), n = .N), by = .(scenario, breed, trait)]
+s[, scen := factor(scen_lab[scenario], levels = scen_lab)]
+lab <- c(NUE = "NUE (genetic SD)", NTM = "NTM value (index units)", CH4 = "Methane (genetic SD)",
+         MUN = "Milk urea N (genetic SD)", PY = "Protein yield (genetic SD)", dF = "Inbreeding rate (% per generation)")
+p <- ggplot(s[trait %in% names(lab)], aes(scen, mean, colour = breed)) +
+  geom_pointrange(aes(ymin = mean - sd, ymax = mean + sd), position = position_dodge(0.6), size = 0.35) +
+  facet_wrap(~ factor(trait, levels = names(lab), labels = lab), scales = "free_y", ncol = 2) +
+  scale_colour_manual(values = pal) + labs(x = NULL, y = "Change after 10 generations\n(mean +/- SD over 10 replicates)", colour = "Breed") +
+  th + theme(axis.text.x = element_text(angle = 30, hjust = 1))
+save_png(p, "response_by_scenario.png", 9, 9)
+tab <- dcast(s[trait %in% c("NUE", "NTM", "CH4", "MUN", "dF")],
+             breed + trait ~ scen, value.var = "mean")
+md_table(tab, "response_means.md", 2)
+```
+
+## Genetic trend of NUE across generations
+
+```{r trend}
+dirs <- c(file.path(R, "sim_FULL_rg1.00"), file.path(R, paste0("sim_FULL_rg1.00_rep", 1:9)))
+tr <- rbindlist(lapply(seq_along(dirs), function(i) {
+  d <- dirs[i]; r <- i - 1; suf <- if (r == 0) "" else paste0("_rep", r)
+  rbindlist(lapply(c("GS_NTM", "GS_NTM_NUE35", "GS_NTM_NUE75"), function(sc) {
+    f <- file.path(d, sprintf("gs_trend_%s%s.csv", sc, suf)); b <- fread(file.path(d, "trend_burnin.csv"))
+    x <- fread(f)[trait == "NUE", .(generation, breed, mean_G)]
+    b0 <- b[trait == "NUE" & generation == max(generation), .(breed, start = mean_G)]
+    # the first recorded generation is the start population of the programme (generation 0)
+    merge(x, b0, by = "breed")[, .(generation = generation - min(generation), breed, G = mean_G - start)][, `:=`(scenario = sc, replicate = r)]
+  }))
+}))
+ts <- tr[, .(G = mean(G), se = sd(G) / sqrt(.N)), by = .(scenario, breed, generation)]
+ts[, scen := factor(scen_lab[scenario], levels = scen_lab)]
+p <- ggplot(ts, aes(generation, G, colour = scen, fill = scen)) +
+  geom_ribbon(aes(ymin = G - 1.96 * se, ymax = G + 1.96 * se), alpha = 0.15, colour = NA) + geom_line(linewidth = 0.8) +
+  facet_wrap(~ breed) + scale_x_continuous(breaks = 0:10) + scale_colour_manual(values = c("#555555", "#1b9e77", "#7570b3")) +
+  scale_fill_manual(values = c("#555555", "#1b9e77", "#7570b3")) +
+  labs(x = "Generation of genomic selection", y = "NUE genetic gain (founder genetic SD)", colour = "Index", fill = "Index") + th
+save_png(p, "nue_trend.png", 9, 4)
+```
+
+## Inbreeding across generations
+
+```{r inbreeding}
+inb <- rbindlist(lapply(seq_along(dirs), function(i) {
+  d <- dirs[i]; r <- i - 1; suf <- if (r == 0) "" else paste0("_rep", r)
+  rbindlist(lapply(c("GS_NTM_NUE35", "GS_NTM_NUE35_OCS_dF1"), function(sc)
+    fread(file.path(d, sprintf("gs_inbreeding_%s%s.csv", sc, suf)))[, .(generation, breed, F_genomic, scenario = sc)]))
+}))
+is <- inb[, .(F = mean(F_genomic)), by = .(scenario, breed, generation)][, generation := generation - min(generation) + 1]
+is[, scen := factor(scen_lab[scenario], levels = scen_lab)]
+p <- ggplot(is, aes(generation, F, colour = breed, linetype = scen)) + geom_line(linewidth = 0.8) +
+  scale_colour_manual(values = pal) + scale_x_continuous(breaks = 1:10) + labs(x = "Generation of genomic selection", y = "Genomic inbreeding F\n(mean of 10 replicates)",
+                                           colour = "Breed", linetype = "Programme") + th
+save_png(p, "inbreeding.png", 8, 4.5)
+```
+
+## Multiple testing
+
+```{r mt}
+pt <- fread(file.path(R, "sim_FULL_rg1.00/paired_tests_multiple_testing.csv"))[trait != "EUR"]
+cnt <- pt[, .(Uncorrected = sum(p_paired < 0.05), `Benjamini-Hochberg` = sum(p_BH < 0.05), Bonferroni = sum(p_Bonferroni < 0.05)),
+          by = .(Comparison = comparison)]
+cnt <- rbind(cnt, data.table(Comparison = "All comparisons (120 tests)", Uncorrected = sum(cnt$Uncorrected),
+                             `Benjamini-Hochberg` = sum(cnt$`Benjamini-Hochberg`), Bonferroni = sum(cnt$Bonferroni)))
+md_table(cnt, "mt_counts.md", 0)
+key <- pt[(comparison %like% "NUE35 - GS_NTM$|NUE75 - GS_NTM$" & trait %in% c("NUE", "NTM")) |
+            (comparison %like% "CH4" & trait %in% c("CH4", "NTM")) | (comparison %like% "MUN -" & trait %in% c("MUN", "NUE", "NTM")) |
+            (comparison %like% "OCS" & trait %in% c("dF", "NTM"))]
+key[, `:=`(sig_raw = ifelse(p_paired < 0.05, "yes", "no"), sig_BH = ifelse(p_BH < 0.05, "yes", "no"), sig_Bonf = ifelse(p_Bonferroni < 0.05, "yes", "no"))]
+md_table(key[, .(Comparison = comparison, Trait = trait, Breed = breed, `Mean difference` = mean_diff, `p (uncorrected)` = signif(p_paired, 2),
+                 `p (BH)` = signif(p_BH, 2), `Significant: uncorrected` = sig_raw, `BH` = sig_BH, `Bonferroni` = sig_Bonf)], "mt_key.md", 3)
+```
+
+## Sensitivity analyses
+
+```{r sensitivity}
+sdir <- function(set, r) file.path(R, paste0("sim_FULL_rg1.00", if (set == "main") "" else paste0("_", set), if (r == 0) "" else paste0("_rep", r)))
+sens <- rbindlist(lapply(c("main", "NUEx0", "NUEx05", "SFh008"), function(set) rbindlist(lapply(0:4, function(r) {
+  d <- sdir(set, r); suf <- if (r == 0) "" else paste0("_rep", r)
+  b <- fread(file.path(d, "trend_burnin.csv"))[trait == "NUE" & generation == max(generation), .(breed, start = mean_G)]
+  rbindlist(lapply(c("GS_NTM", "GS_NTM_NUE35"), function(sc) {
+    x <- fread(file.path(d, sprintf("gs_trend_%s%s.csv", sc, suf)))[trait == "NUE" & generation == max(generation), .(breed, end = mean_G)]
+    merge(x, b, by = "breed")[, .(breed, NUE = end - start, scenario = sc, set = set, replicate = r)]
+  }))
+}))))
+w <- dcast(sens, set + breed + replicate ~ scenario, value.var = "NUE")
+w[, gain := GS_NTM_NUE35 - GS_NTM]
+ss <- rbind(w[, .(what = "NUE gain under NTM alone", m = mean(GS_NTM), se = sd(GS_NTM) / sqrt(.N)), by = .(set, breed)],
+            w[, .(what = "Extra NUE from weight 0.35", m = mean(gain), se = sd(gain) / sqrt(.N)), by = .(set, breed)])
+ss[, what := factor(what, levels = c("NUE gain under NTM alone", "Extra NUE from weight 0.35"))]
+ss[, set := factor(set, levels = c("main", "NUEx05", "NUEx0", "SFh008"),
+                   labels = c("Main run", "NUE correlations x 0.5", "NUE correlations x 0", "Saved Feed h2 0.08"))]
+p <- ggplot(ss, aes(set, m, colour = breed)) + geom_hline(yintercept = 0, colour = "grey60") +
+  geom_pointrange(aes(ymin = m - 1.96 * se, ymax = m + 1.96 * se), position = position_dodge(0.5), size = 0.35) +
+  facet_wrap(~ what) + scale_colour_manual(values = pal) +
+  labs(x = NULL, y = "NUE response (genetic SD)\nmean and 95% CI, 5 replicates", colour = "Breed") +
+  th + theme(axis.text.x = element_text(angle = 25, hjust = 1))
+save_png(p, "sensitivity.png", 9, 4.8)
+```
+
+## Genomic prediction accuracy (cross-validation)
+
+```{r cv}
+cv <- rbindlist(lapply(c("NUE", "MUN", "SF", "CH4"), function(t) fread(file.path(R, sprintf("sim_FULL_rg1.00/cv_results_%s.csv", t)))))
+cv <- cv[model != "GBLUP_snp"]
+cvs <- cv[, .(acc = mean(acc_within_breed, na.rm = TRUE)), by = .(trait, model, scheme = ifelse(scheme == "forward", "forward", "k-fold"))]
+md_table(dcast(cvs, model ~ trait + scheme, value.var = "acc"), "cv_accuracy.md", 2)
+```
+
+## GxE
+
+```{r gxe}
+g1 <- fread(file.path(R, "sim_FULL_rg1.00/gxe_models.csv"))[model == "M2_CS"][, data := "No GxE simulated (control)"]
+g9 <- fread(file.path(R, "sim_FULL_rg0.90/gxe_models.csv"))[model == "M2_CS"][, data := "GxE simulated (r_g = 0.9)"]
+md_table(rbind(g1, g9)[, .(Data = data, Trait = trait, `LRT p` = p_LRT, `Estimated r_g` = rg_between, SE = rg_se, `True r_g` = true_rg)], "gxe.md", 3)
+```

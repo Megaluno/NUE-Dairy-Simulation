@@ -1,0 +1,32 @@
+# Step 3: multi-trait models and genotype x country interaction {#sec-gxe}
+
+::: {.lead}
+`03_multitrait_gxe.Rmd` asks two questions. Can correlated, cheaply recorded traits help predict NUE? And is one joint evaluation across the four countries valid?
+:::
+
+## Multi-trait models
+
+NUE is expensive to record. If it is genetically correlated with traits that are recorded routinely, those traits can carry information to cows without NUE records. The step fits 11-trait Bayesian models with three structures for the genetic covariances: diagonal (no correlations), unstructured, and factor-analytic.
+
+For cows whose NUE was hidden, NUE accuracy was 0.09 with the unstructured model against 0.01 with the diagonal model. Only the unstructured model gained from the correlations.
+
+::: {.callout-note}
+## Too few cows for 11 traits
+With 1,500 cows, the 11-trait covariance matrix could not be estimated well: heritabilities were pulled towards the prior and genetic correlations shrunk towards zero, although their pattern was recovered. That is one reason why the real CFIT data, with tens of thousands of cows, matter.
+:::
+
+## Genotype x country interaction
+
+One joint evaluation is valid only if the genetic correlation of a trait between countries is high. A correlation below about 0.80 means that bulls re-rank between countries.
+
+- **Decision rule.** GxE is declared only if the likelihood-ratio test has p < 0.05 **and** the upper 95% limit of the between-country correlation is below 0.80.
+- **Negative control.** A dataset simulated without GxE is always analysed as well, to check that the rule does not raise false alarms.
+- **Bayesian check.** The same model is fitted with two opposite priors (correlation 0 and 0.95). If the answer follows the prior, the data are uninformative.
+
+Results of the compound-symmetry model:
+
+{{< include _includes/gxe.md >}}
+
+No false GxE was declared on the control data. With a true between-country correlation of 0.9, the estimates were uninformative (standard errors 0.40 to 1.29), and the Bayesian answer followed the prior. The recommendation is therefore one joint evaluation, unless real data show a correlation credibly below 0.80.
+
+Full reports: [multi-trait models](../reports/03_multitrait_gxe_FULL_rg1.00_MT.html), [GxE control data](../reports/03_multitrait_gxe_FULL_rg1.00_GxE.html), [GxE data with r~g~ = 0.9](../reports/03_multitrait_gxe_FULL_rg0.90_GxE.html).

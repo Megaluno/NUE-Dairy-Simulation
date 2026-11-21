@@ -1,0 +1,70 @@
+# Welcome {.unnumbered}
+
+::: {.lead}
+Can genomic selection improve nitrogen use efficiency (NUE) in dairy cattle, and what does it cost? This site walks through a complete simulation that answers that question for Holstein (HOL), Red Dairy Cattle (RDC) and Jersey (JER) in single-breed herds across Denmark, Sweden, Finland and Germany.
+:::
+
+::: {.callout-important}
+## This is a simulation
+Genetic parameters come from published studies (see @sec-parameters), but the population, genomes and phenotypes were simulated. Results show what the design and the published parameters imply, not what real Nordic data would show.
+:::
+
+## The question
+
+Dairy cows turn only part of the nitrogen they eat into milk protein; the rest leaves the farm as urine and faeces. The Nordic Total Merit index (NTM) does not weigh NUE directly. So the central question is:
+
+> If NUE is added to the NTM breeding goal, how much NUE is gained, and what does it cost in total merit, methane and inbreeding?
+
+## The answer in one table
+
+Responses are over the simulated selection period. Differences are paired within replicate (10 replicates, each with its own founder population). Significance here follows the Benjamini-Hochberg correction explained in @sec-statistics.
+
+| Question | Result |
+|---|---|
+| Does NTM alone improve NUE? | Yes, by 3.3 to 3.4 genetic SD in all breeds, but only through NUE's genetic correlations with yield. With those correlations set to 0, the gain is about 0. |
+| What does an explicit NUE weight add? | Weight 0.35: HOL +1.08, JER +0.94, RDC +0.82 SD of NUE, significant in all three breeds. Weight 0.75: +0.95 to +1.43 SD. |
+| What does the NUE weight cost in NTM? | Too small to detect at weight 0.35: theory predicts about 1.3 to 1.6 index units, and the replicate SD of the difference is 5 to 6 units. |
+| What happens to methane? | Methane rises 1.6 to 2.1 SD under NTM alone. A methane weight of -0.5 lowers it by 1.4 to 1.6 SD, at about EUR 28 to 39 per cow-year (the cost passes correction in HOL and JER only). |
+| Does selecting against milk urea (MUN) help NUE? | No. MUN falls 1.2 to 1.4 SD and NUE does not change. |
+| Can inbreeding be controlled? | Unconstrained genomic selection: 1.8 to 2.2% per generation. Optimum contribution selection: 0.7 to 1.0%. |
+| Is there genotype x country interaction? | It could not be estimated reliably at this sample size. |
+
+## How this site works
+
+Each step of the pipeline is one R Markdown file, and each chapter here explains one step in the same order:
+
+1. **What it does**, in plain words.
+2. **Why** the step is needed.
+3. **The key choices**, with their sources.
+4. **What it found**, with the numbers from the simulation.
+
+```{mermaid}
+flowchart TD
+    A["Step 0<br/>Genetic parameters<br/>and NTM breeding goal"] --> B["Step 1<br/>Founder genomes<br/>and burn-in"]
+    B --> C["Step 2<br/>Genomic prediction<br/>8 models"]
+    B --> D["Step 3<br/>Multi-trait models<br/>and GxE"]
+    B --> E["Step 4<br/>Breeding programme<br/>8 scenarios"]
+    A --> E
+    C --> F["Step 5<br/>Summary, statistics,<br/>sensitivity, breeding plan"]
+    D --> F
+    E --> F
+```
+
+::: {.callout-tip}
+## Read the full reports
+Every chapter links to the full HTML report of its step, with all code and output. They are listed together in @sec-reports.
+:::
+
+## At a glance
+
+| | |
+|---|---|
+| Breeds | Holstein, Red Dairy Cattle, Jersey |
+| Countries | Denmark, Sweden, Finland, Germany |
+| Herds | 40 single-breed herds, sized from published CFIT 3D-camera herd numbers |
+| Traits (11) | Milk, protein and fat yield; Saved Feed; somatic cell score; resilience (LnVar); calving interval; longevity; milk urea nitrogen; NUE; methane |
+| Genome | 29 chromosomes, 10,005 SNP, 600 founders per breed |
+| Replicates | 10 per main scenario (independent founders), 5 per sensitivity set |
+| Software | R 4.3.3, AlphaSimR 2.1.0, sommer 4.5.12, BGLR 1.1.4, rrBLUP 4.6.3, nadiv 2.18.0 |
+
+The code, parameters and every result table are in the [GitHub repository](https://github.com/Megaluno/NUE-Dairy-Simulation). The repository is public for reading only; see its licence.

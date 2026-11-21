@@ -1,0 +1,72 @@
+project:
+  type: book
+  output-dir: docs
+  render:
+    - index.qmd
+    - book/*.qmd
+  resources:
+    - reports/*.html
+    - results/*.xlsx
+
+book:
+  title: "Nitrogen Use Efficiency in Dairy Breeding"
+  subtitle: "A step-by-step simulation of genomic selection for nitrogen use efficiency in Holstein, Red Dairy Cattle and Jersey"
+  author: "Ismaila Emmanuel Oluwasegun"
+  site-url: https://megaluno.github.io/NUE-Dairy-Simulation/
+  repo-url: https://github.com/Megaluno/NUE-Dairy-Simulation
+  repo-actions: [issue]
+  downloads: []
+  search: true
+  page-navigation: true
+  sidebar:
+    style: docked
+    collapse-level: 1
+  page-footer:
+    left: "Nitrogen Use Efficiency in Dairy Breeding"
+    right: "All rights reserved"
+  chapters:
+    - index.qmd
+    - part: "The question"
+      chapters:
+        - book/01-question.qmd
+    - part: "The pipeline, step by step"
+      chapters:
+        - book/02-parameters.qmd
+        - book/03-founders.qmd
+        - book/04-prediction.qmd
+        - book/05-multitrait-gxe.qmd
+        - book/06-programme.qmd
+    - part: "Results"
+      chapters:
+        - book/07-results.qmd
+        - book/08-statistics.qmd
+        - book/09-sensitivity.qmd
+        - book/10-plan.qmd
+    - part: "Use it yourself"
+      chapters:
+        - book/11-reproduce.qmd
+  appendices:
+    - book/A-reports.qmd
+    - book/B-references.qmd
+
+format:
+  html:
+    theme:
+      light: [cosmo, custom.scss]
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    code-copy: true
+    code-overflow: wrap
+    code-block-bg: true
+    code-block-border-left: "#0072B2"
+    fig-align: center
+    fig-cap-location: bottom
+    tbl-cap-location: top
+    html-math-method: mathjax
+    smooth-scroll: true
+    link-external-newwindow: true
+
+execute:
+  eval: false
+  echo: true

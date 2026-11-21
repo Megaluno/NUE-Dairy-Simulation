@@ -1,0 +1,14 @@
+/*-- scss:defaults --*/
+$primary: #0b5d8c;
+$link-color: #0b5d8c;
+$font-size-root: 17px;
+$code-color: #8a3a00;
+
+/*-- scss:rules --*/
+.sidebar-title { font-weight: 700; }
+figure img { border-radius: 4px; }
+.cell-output pre, pre.text { background: #f6f8fa; }
+table { font-size: 0.93rem; }
+.callout-tip .callout-title-container::before { content: ""; }
+h2 { margin-top: 2.2rem; border-bottom: 1px solid #e3e7ea; padding-bottom: 0.3rem; }
+.lead { font-size: 1.12rem; color: #444; }

@@ -5,3 +5,7 @@
 !params/*.rds
 .Rhistory
 .RData
+/.quarto/
+*_files/
+
+**/*.quarto_ipynb

@@ -1,0 +1,30 @@
+# Recommended breeding plan and limitations {#sec-plan}
+
+::: {.lead}
+What should a breeding organisation do with these results, and what would change them?
+:::
+
+## The plan
+
+1. **Evaluation.** A single-step model for routine evaluation, because it uses cows with CFIT records but no genotypes. In a multi-breed population, the genomic and pedigree relationships must be made compatible first (adjusted G or breed metafounders). Weighted single-step should not be used, because its breeding values were over-dispersed.
+2. **Selection index.** Add an explicit NUE weight to NTM. NTM alone improves NUE only through its correlations with yield; an explicit weight adds about 0.8 to 1.1 SD more at weight 0.35. Which weight to use is a price decision for the breeding organisation; because the simulated NTM cost is within noise, the cost should be priced from selection-index theory.
+3. **No milk urea weight**, unless urinary nitrogen or ammonia gets its own value in the breeding goal. A milk urea weight lowered milk urea but did not raise NUE.
+4. **Methane.** A methane weight of -0.5 reverses most of the rise in methane under NTM, at a cost in NTM value.
+5. **One joint evaluation** across Denmark, Sweden, Finland and Germany, unless a GxE analysis on real data shows a between-country correlation credibly below 0.80.
+6. **Optimum contribution selection** at 1% inbreeding per generation. Mate allocation alone lowered final inbreeding but left the rate at 0.8 to 1.2% per generation, above the guideline.
+7. **Records.** CFIT feed intake for nitrogen intake, plus milk protein and milk urea from routine recording. Predicted NUE is the realistic phenotype; measured urinary nitrogen is not available at scale.
+
+## Limitations
+
+- 15 of 55 genetic correlations are implied by bending, not estimated, and many sourced values are proxies or come from other breeds.
+- All NUE correlations come from one grazing Irish study; confinement-fed Nordic cows may differ.
+- Only 64 to 72% of the NTM weight is simulated, so absolute EUR values are too large. Comparisons between scenarios are less affected.
+- 10,005 SNP and a 1,500-cow subsample for genomic cross-validation and GxE, because of computing limits.
+- Methane parameters from Danish Holstein are applied to all breeds.
+- The NTM costs of the milk urea weight and of optimum contribution selection do not pass correction for multiple testing; more replicates are needed.
+
+## What real data would add
+
+Genetic correlations of NUE with production, feed efficiency, health, fertility and resilience in Nordic breeds; whether these correlations change across lactation and parity; and GxE estimated on the full population. The pipeline reads all parameters from the `params/` folder, so real estimates can replace the literature values directly.
+
+The full list of assumptions and the verification log are in the [pipeline notes](https://github.com/Megaluno/NUE-Dairy-Simulation/blob/main/notes/pipeline_notes_and_verification_log.md).

@@ -2,6 +2,8 @@
 
 A reproducible simulation pipeline in R Markdown (AlphaSimR) that models a Nordic-style dairy breeding programme: Holstein (HOL), Red Dairy Cattle (RDC) and Jersey (JER) in single-breed herds across Denmark, Sweden, Finland and Germany.
 
+**Read it online:** https://megaluno.github.io/NUE-Dairy-Simulation/ (a step-by-step website with figures and every report).
+
 **Central Question:** If nitrogen use efficiency (NUE) is added to the Nordic Total Merit (NTM) breeding goal, how much NUE is gained, and what does it cost in total merit, methane and inbreeding?
 
 > <u><strong>This is a simulation.</strong></u>
@@ -214,7 +216,7 @@ The recommendation to add an NUE weight does not depend on the uncertain NUE cor
 - CH4 parameters from Danish Holstein are applied to all breeds.
 - NTM cost estimates of the MUN weight and of optimum contribution selection do not pass correction for multiple testing; more replicates are needed.
 
-The full list of assumptions and the verification log (24 entries of bugs found, fixes and checks) are in [`docs/pipeline_notes_and_verification_log.md`](docs/pipeline_notes_and_verification_log.md).
+The full list of assumptions and the verification log (24 entries of bugs found, fixes and checks) are in [`notes/pipeline_notes_and_verification_log.md`](notes/pipeline_notes_and_verification_log.md).
 
 **What real data would add.** Genetic correlations of NUE with production, feed efficiency, health, fertility and resilience in Nordic breeds; whether they change across lactation and parity; and GxE estimated on the full population. The pipeline reads all parameters from `params/`, so real estimates can replace the literature values directly.
 
@@ -245,7 +247,9 @@ reports/     rendered HTML reports (replicate 0 for steps 1 and 4)
 results/     result tables of every replicate and sensitivity set (CSV), two workbooks
 tools/       scripts that build the workbooks
 hpc/         cluster version (50k SNP, 20 replicates)
-docs/        assumptions and verification log
+notes/       assumptions and verification log
+book/, index.qmd, _quarto.yml   source of the website (Quarto); figures built by book/make_figures.Rmd
+docs/        the rendered website (served by GitHub Pages)
 queue.sh, run_step.sh, queue_full_run.txt   resumable run queue
 ```
 

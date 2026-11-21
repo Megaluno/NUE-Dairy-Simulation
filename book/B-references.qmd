@@ -1,0 +1,16 @@
+# References {#sec-references}
+
+- Benjamini, Y., Hochberg, Y. (1995). Controlling the false discovery rate. *Journal of the Royal Statistical Society B* 57, 289-300.
+- Benjamini, Y., Yekutieli, D. (2001). The control of the false discovery rate in multiple testing under dependency. *Annals of Statistics* 29, 1165-1188.
+- Buitenhuis, B., Poulsen, N.A. (2023). *Journal of Dairy Science* 106, 5562-5569. Milk urea heritability in Danish breeds.
+- Chen et al. (2021). *Journal of Dairy Science* 104, 4413-4423. Heritability of predicted NUE.
+- Jorjani, H., Klei, L., Emanuelson, U. (2003). A simple method for weighted bending of genetic (co)variance matrices. *Journal of Dairy Science* 86, 677-679.
+- Legarra, A. et al. (2015). Metafounders. *Genetics* 200, 455-468.
+- Li, B. et al. (2018). Genetic heterogeneity of feed intake, energy-corrected milk, and body weight across lactation in primiparous Holstein, Nordic Red, and Jersey cows. *Journal of Dairy Science* 101, 10011-10021.
+- Lidauer, M.H. et al. (2023). *Animal* 17, 100917. Residual feed intake in Nordic Red.
+- MacLeod, I.M. et al. (2013). Cattle demographic history. *Molecular Biology and Evolution* 30, 2209-2223.
+- Schneider et al. (2025). *Journal of Dairy Science* 108, 12519-12530. Methane in Danish Holstein.
+- Tavernier et al. (2024). *Journal of Dairy Science* 107, 2231-2240. Genetic parameters of NUE.
+- Vitezica, Z.G. et al. (2011). Compatibility of G and A. *Genetics Research* 93, 357-366.
+
+The full source list for every parameter, with DOIs, is in the [evidence workbook](../results/rg_evidence.xlsx) and in [the Step 0 report](../reports/00_genetic_parameters.html).

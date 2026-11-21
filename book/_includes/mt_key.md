@@ -1,0 +1,35 @@
+| Comparison | Trait | Breed | Mean difference | p (uncorrected) | p (BH) | Significant: uncorrected | BH | Bonferroni |
+|---|---|---|---|---|---|---|---|---|
+| GS_NTM_NUE35 - GS_NTM | NUE | HOL | 1.081 | 0.000 | 0.000 | yes | yes | yes |
+| GS_NTM_NUE35 - GS_NTM | NUE | JER | 0.936 | 0.001 | 0.009 | yes | yes | no |
+| GS_NTM_NUE35 - GS_NTM | NUE | RDC | 0.818 | 0.003 | 0.014 | yes | yes | no |
+| GS_NTM_NUE75 - GS_NTM | NUE | HOL | 1.426 | 0.000 | 0.000 | yes | yes | yes |
+| GS_NTM_NUE75 - GS_NTM | NUE | JER | 0.947 | 0.002 | 0.009 | yes | yes | no |
+| GS_NTM_NUE75 - GS_NTM | NUE | RDC | 1.199 | 0.000 | 0.000 | yes | yes | yes |
+| GS_NTM_NUE35_MUN - GS_NTM_NUE35 | NUE | HOL | 0.051 | 0.720 | 0.840 | no | no | no |
+| GS_NTM_NUE35_MUN - GS_NTM_NUE35 | NUE | JER | -0.223 | 0.370 | 0.530 | no | no | no |
+| GS_NTM_NUE35_MUN - GS_NTM_NUE35 | NUE | RDC | 0.053 | 0.660 | 0.790 | no | no | no |
+| GS_NTM_NUE35_MUN - GS_NTM_NUE35 | MUN | HOL | -1.421 | 0.000 | 0.001 | yes | yes | yes |
+| GS_NTM_NUE35_MUN - GS_NTM_NUE35 | MUN | JER | -1.343 | 0.000 | 0.001 | yes | yes | yes |
+| GS_NTM_NUE35_MUN - GS_NTM_NUE35 | MUN | RDC | -1.244 | 0.000 | 0.003 | yes | yes | no |
+| GS_NTM_NUE75_CH4 - GS_NTM_NUE75 | CH4 | HOL | -1.584 | 0.000 | 0.000 | yes | yes | yes |
+| GS_NTM_NUE75_CH4 - GS_NTM_NUE75 | CH4 | JER | -1.483 | 0.000 | 0.000 | yes | yes | yes |
+| GS_NTM_NUE75_CH4 - GS_NTM_NUE75 | CH4 | RDC | -1.430 | 0.000 | 0.000 | yes | yes | yes |
+| GS_NTM_NUE35 - GS_NTM | NTM | HOL | 4.686 | 0.038 | 0.086 | yes | no | no |
+| GS_NTM_NUE35 - GS_NTM | NTM | JER | 0.502 | 0.790 | 0.850 | no | no | no |
+| GS_NTM_NUE35 - GS_NTM | NTM | RDC | 2.020 | 0.260 | 0.420 | no | no | no |
+| GS_NTM_NUE75 - GS_NTM | NTM | HOL | -0.183 | 0.850 | 0.880 | no | no | no |
+| GS_NTM_NUE75 - GS_NTM | NTM | JER | -2.857 | 0.041 | 0.090 | yes | no | no |
+| GS_NTM_NUE75 - GS_NTM | NTM | RDC | 0.812 | 0.610 | 0.760 | no | no | no |
+| GS_NTM_NUE35_MUN - GS_NTM_NUE35 | NTM | HOL | -5.026 | 0.037 | 0.086 | yes | no | no |
+| GS_NTM_NUE35_MUN - GS_NTM_NUE35 | NTM | JER | -3.886 | 0.086 | 0.160 | no | no | no |
+| GS_NTM_NUE35_MUN - GS_NTM_NUE35 | NTM | RDC | -4.689 | 0.042 | 0.090 | yes | no | no |
+| GS_NTM_NUE75_CH4 - GS_NTM_NUE75 | NTM | HOL | -3.984 | 0.000 | 0.003 | yes | yes | no |
+| GS_NTM_NUE75_CH4 - GS_NTM_NUE75 | NTM | JER | -3.540 | 0.015 | 0.044 | yes | yes | no |
+| GS_NTM_NUE75_CH4 - GS_NTM_NUE75 | NTM | RDC | -3.985 | 0.036 | 0.085 | yes | no | no |
+| GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35 | NTM | HOL | -3.881 | 0.042 | 0.090 | yes | no | no |
+| GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35 | NTM | JER | -3.693 | 0.033 | 0.078 | yes | no | no |
+| GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35 | NTM | RDC | -3.283 | 0.044 | 0.093 | yes | no | no |
+| GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35 | dF | HOL | -0.010 | 0.000 | 0.000 | yes | yes | yes |
+| GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35 | dF | JER | -0.013 | 0.000 | 0.000 | yes | yes | yes |
+| GS_NTM_NUE35_OCS_dF1 - GS_NTM_NUE35 | dF | RDC | -0.010 | 0.000 | 0.000 | yes | yes | yes |

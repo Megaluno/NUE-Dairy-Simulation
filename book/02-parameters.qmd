@@ -1,0 +1,34 @@
+# Step 0: genetic parameters and breeding goal {#sec-parameters}
+
+::: {.lead}
+`00_genetic_parameters.Rmd` collects every heritability and genetic correlation with its source, builds a valid correlation matrix, and defines the selection indices. A simulation is only as good as its inputs, so every value is either cited or labelled as not estimated.
+:::
+
+## Criteria applied
+
+1. Only verified values from a cited source were used (`VERIFIED`).
+2. Values from neighbouring European populations were allowed for relationships with no Nordic estimate (`VERIFIED-EU`).
+3. Where a source reported a range, the midpoint was used and the range was kept for sensitivity analysis.
+
+## Heritabilities
+
+Breed-specific values were used where published.
+
+{{< include _includes/h2.md >}}
+
+## Genetic correlations
+
+- **40 of 55 trait pairs** have a published source. Index-based values were accepted only from Nordic breeds, genuine estimates from European studies, and recent estimates over old ones. The evidence for every pair is in [the evidence workbook](../results/rg_evidence.xlsx).
+- **The other 15 pairs** take the values implied by *weighted bending* (Jorjani et al. 2003). Bending makes the matrix positive definite, which the simulation needs, while moving published values by at most about 0.015. These 15 values are not estimates.
+- **The NUE correlations** (milk yield 0.52, protein yield 0.80, milk urea -0.12) all come from one study of grazing Irish cows (Tavernier et al. 2024). This is the weakest input, so @sec-sensitivity tests how much the conclusions depend on it.
+
+::: {.callout-warning}
+## Why ordinary bending was not used
+Ordinary bending shrinks every correlation by the same rule. It would have moved the published milk-protein correlation from 0.86 to 0.74. Weighted bending keeps published values almost fixed and moves the unknown ones instead.
+:::
+
+## The breeding goal
+
+The NTM sub-index weights (May 2026) were used for the sub-indices that have a simulated trait. These carry 64% of the NTM weight for HOL and RDC and 72% for JER; the rest is not simulated. NUE has no published economic value, so two weights were tested on top of NTM: **0.35** (equal to the Saved Feed weight) and **0.75**.
+
+Full report: [Step 0, genetic parameters](../reports/00_genetic_parameters.html). The check of the correlation update is in [the update-check report](../reports/00b_rg_update_check.html).

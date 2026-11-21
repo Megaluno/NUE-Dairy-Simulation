@@ -1,0 +1,24 @@
+# Step 1: founder genomes and burn-in {#sec-founders}
+
+::: {.lead}
+`01_founders_burnin.Rmd` creates founder genomes for three breeds, gives every animal correlated genetic values for the 11 traits, places cows in herds, and runs a burn-in of historical selection.
+:::
+
+## Why this step matters
+
+Genomic selection works through linkage disequilibrium between markers and causal loci, and through family structure. If the starting population were a random sample, genomic prediction would look better or worse than it really is. The start population must look like a selected cattle population.
+
+## Key choices
+
+- **Coalescent founders.** Genomes come from MaCS with the cattle demography in AlphaSimR (current effective population size 90; MacLeod et al. 2013), extended to three breeds: the HOL and RDC lineages join 30 generations ago and JER 50 generations ago. These split times are not calibrated to an observed F~ST~.
+- **Genome size.** 29 chromosomes (the bovine autosomes), so that genome length is realistic, with 10,005 SNP and 600 founders per breed. The SNP number was chosen to fit a 2-core, 6 GB machine; a 50k version is in the `hpc/` folder.
+- **Herds.** Single-breed herds, as on CFIT farms.
+- **Burn-in.** Selection on milk and protein yield, to reproduce historical yield selection before NUE is considered.
+- **Replicates.** Each replicate uses seed 20261031 plus the replicate number and draws its own founders, so the spread between replicates includes founder sampling.
+
+::: {.callout-tip}
+## Paired comparisons
+Within a replicate, every breeding scenario starts from the same founders, burn-in and random seed. A difference between two scenarios is therefore paired, which removes much of the noise when they are compared in @sec-statistics.
+:::
+
+Full report: [Step 1, founders and burn-in](../reports/01_founders_burnin_FULL_rg1.00.html).

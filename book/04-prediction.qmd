@@ -1,0 +1,38 @@
+# Step 2: genomic prediction {#sec-prediction}
+
+::: {.lead}
+`02_genomic_prediction.Rmd` compares eight evaluation models for NUE, milk urea, Saved Feed and methane, to choose the model on evidence and to measure how well a low-heritability trait like NUE can be predicted.
+:::
+
+## The models
+
+| Model | Idea |
+|---|---|
+| ABLUP | Pedigree only (baseline) |
+| GBLUP | Genomic relationships, many small effects |
+| ssGBLUP | Single-step: genotyped and non-genotyped animals together, pooled |
+| ssGBLUP_MF | Single-step with breed metafounders |
+| wssGBLUP | Weighted single-step |
+| rrBLUP | Ridge regression on SNP effects |
+| BayesA, BayesB | Allow some SNP to have large effects |
+
+## How accuracy was measured
+
+- **Validation.** Three-fold cross-validation, plus forward validation in which the youngest cows are predicted from older ones.
+- **Accuracy** is the correlation between the estimated and the true breeding value. Only a simulation knows the true value.
+- **Within-breed accuracy** is reported, because selection happens within breed. Pooled accuracy is distorted by differences between breed means.
+
+::: {.callout-warning}
+## Single-step in a multi-breed population
+The genomic (G) and pedigree (A~22~) relationship matrices have different bases. Without adjustment, single-step GBLUP gives breed-level offsets in the breeding values. The pipeline tests an adjusted G and breed metafounders (Vitezica et al. 2011; Legarra et al. 2015).
+:::
+
+## What it found
+
+Mean within-breed accuracy of each model (forward and k-fold validation):
+
+{{< include _includes/cv_accuracy.md >}}
+
+A single-step model was the best or within 0.05 of the best in 10 of 10 trait x validation comparisons. Differences below about 0.05 are within fold-to-fold noise. Weighted single-step gave over-dispersed breeding values.
+
+Full reports: [NUE](../reports/02_genomic_prediction_FULL_rg1.00_NUE.html), [milk urea](../reports/02_genomic_prediction_FULL_rg1.00_MUN.html), [Saved Feed](../reports/02_genomic_prediction_FULL_rg1.00_SF.html), [methane](../reports/02_genomic_prediction_FULL_rg1.00_CH4.html).

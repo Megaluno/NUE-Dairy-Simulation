@@ -1,0 +1,53 @@
+# Reproduce the pipeline {#sec-reproduce}
+
+::: {.lead}
+Everything on this site is produced by R Markdown files in the repository. This chapter explains how to run them.
+:::
+
+## Requirements
+
+R 4.3 or later with `AlphaSimR`, `sommer`, `BGLR`, `rrBLUP`, `nadiv`, `data.table`, `ggplot2`, `knitr` and `rmarkdown`. The script `hpc/install_packages.R` installs them.
+
+## Run it
+
+```bash
+# Quick check of the whole chain at 5% scale
+Rscript -e "rmarkdown::render('00_genetic_parameters.Rmd')"
+Rscript -e "rmarkdown::render('01_founders_burnin.Rmd', params = list(run_mode = 'TEST'))"
+
+# The full run reported here (144 steps, resumable; each finished step leaves logs/<step>.done)
+./queue.sh queue_full_run.txt
+
+# Rebuild the spreadsheet of replicate results
+python3 tools/build_xlsx.py
+```
+
+::: {.callout-note}
+## How long it takes
+On a 2-core, 6 GB machine the full run took about three days: about 80 minutes per founder set, 6 to 9 minutes per burn-in and 24 to 36 minutes per scenario. The 50k-SNP cluster version is in `hpc/`.
+:::
+
+## Rebuild this website
+
+The figures and tables on this site are drawn from the result files by `book/make_figures.Rmd`. Then [Quarto](https://quarto.org) renders the site into `docs/`:
+
+```bash
+cd book && Rscript -e "rmarkdown::render('make_figures.Rmd')" && cd ..
+quarto render
+```
+
+## Repository layout
+
+| Folder or file | Contents |
+|---|---|
+| `00_genetic_parameters.Rmd` to `05_summary.Rmd` | The pipeline, run in order |
+| `params/` | Genetic parameters, index weights, sourcing evidence |
+| `reports/` | Rendered HTML reports |
+| `results/` | Result tables of every replicate and sensitivity set, and two workbooks |
+| `tools/` | Scripts that build the workbooks |
+| `hpc/` | Cluster version (50k SNP, 20 replicates) |
+| `notes/` | Assumptions and verification log |
+| `book/`, `index.qmd`, `_quarto.yml` | Source of this website |
+| `docs/` | The rendered website (served by GitHub Pages) |
+
+Large simulation state files (genomes, phenotypes and pedigrees) are not stored; the code regenerates them from the seeds.
