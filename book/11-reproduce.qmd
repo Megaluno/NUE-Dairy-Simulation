@@ -8,6 +8,13 @@ Everything on this site is produced by R Markdown files in the repository. This 
 
 R 4.3 or later with `AlphaSimR`, `sommer`, `BGLR`, `rrBLUP`, `nadiv`, `data.table`, `ggplot2`, `knitr` and `rmarkdown`. The script `hpc/install_packages.R` installs them.
 
+The extra genomic prediction models of Step 2 (`extra_models = true`) also need:
+
+- **BayesRCO** for BayesR and BayesRC: compiled from source with `gfortran`.
+- **Julia 1.10** with **JWAS 2.4.0**. The exact package versions are in `tools/julia_env/`. Distributions is pinned to 0.25.80, because JWAS 2.4.0 allows StatsBase only up to 0.33 and later Distributions releases do not work with it.
+
+`tools/install_extra_models.sh` installs both. MTG2 and DMU are distributed by their authors as executables ([MTG2](https://sites.google.com/site/honglee0707/mtg2), [DMU](https://dmu.ghpc.au.dk/dmu/)); DMU is free for research, while commercial use such as routine evaluation needs terms from QGG.
+
 ## Run it
 
 ```bash
@@ -17,6 +24,9 @@ Rscript -e "rmarkdown::render('01_founders_burnin.Rmd', params = list(run_mode =
 
 # The full run reported here (144 steps, resumable; each finished step leaves logs/<step>.done)
 ./queue.sh queue_full_run.txt
+
+# Step 2 again with the extra models (BayesR, BayesRC, JWAS) for the four traits
+./queue.sh queue_extra_models.txt
 
 # Rebuild the spreadsheet of replicate results
 python3 tools/build_xlsx.py

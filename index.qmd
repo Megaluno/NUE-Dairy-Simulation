@@ -41,7 +41,7 @@ Each step of the pipeline is one R Markdown file, and each chapter here explains
 ```{mermaid}
 flowchart TD
     A["Step 0<br/>Genetic parameters<br/>and NTM breeding goal"] --> B["Step 1<br/>Founder genomes<br/>and burn-in"]
-    B --> C["Step 2<br/>Genomic prediction<br/>8 models"]
+    B --> C["Step 2<br/>Genomic prediction<br/>13 models"]
     B --> D["Step 3<br/>Multi-trait models<br/>and GxE"]
     B --> E["Step 4<br/>Breeding programme<br/>8 scenarios"]
     A --> E

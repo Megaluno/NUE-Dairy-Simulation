@@ -4,11 +4,19 @@
 - Benjamini, Y., Yekutieli, D. (2001). The control of the false discovery rate in multiple testing under dependency. *Annals of Statistics* 29, 1165-1188.
 - Buitenhuis, B., Poulsen, N.A. (2023). *Journal of Dairy Science* 106, 5562-5569. Milk urea heritability in Danish breeds.
 - Chen et al. (2021). *Journal of Dairy Science* 104, 4413-4423. Heritability of predicted NUE.
+- Cheng, H., Fernando, R.L., Garrick, D.J. (2018). JWAS: Julia implementation of whole-genome analysis software. *Proceedings of the World Congress on Genetics Applied to Livestock Production* 11, 859. Auckland, New Zealand.
+- Cheng, H., Kizilkaya, K., Zeng, J., Garrick, D., Fernando, R. (2018). Genomic prediction from multiple-trait Bayesian regression methods using mixture priors. *Genetics* 209, 89-103.
+- Habier, D., Fernando, R.L., Kizilkaya, K., Garrick, D.J. (2011). Extension of the Bayesian alphabet for genomic selection. *BMC Bioinformatics* 12, 186.
 - Jorjani, H., Klei, L., Emanuelson, U. (2003). A simple method for weighted bending of genetic (co)variance matrices. *Journal of Dairy Science* 86, 677-679.
+- Lee, S.H., van der Werf, J.H.J. (2016). MTG2: an efficient algorithm for multivariate linear mixed model analysis based on genomic information. *Bioinformatics* 32, 1420-1422. doi:10.1093/bioinformatics/btw012
 - Legarra, A. et al. (2015). Metafounders. *Genetics* 200, 455-468.
 - Li, B. et al. (2018). Genetic heterogeneity of feed intake, energy-corrected milk, and body weight across lactation in primiparous Holstein, Nordic Red, and Jersey cows. *Journal of Dairy Science* 101, 10011-10021.
 - Lidauer, M.H. et al. (2023). *Animal* 17, 100917. Residual feed intake in Nordic Red.
 - MacLeod, I.M. et al. (2013). Cattle demographic history. *Molecular Biology and Evolution* 30, 2209-2223.
+- MacLeod, I.M. et al. (2016). Exploiting biological priors and sequence variants enhances QTL discovery and genomic prediction of complex traits. *BMC Genomics* 17, 144. doi:10.1186/s12864-016-2443-6
+- Madsen, P., Jensen, J. (2024). *A User's Guide to DMU. A Package for Analysing Multivariate Mixed Models.* Version 6, release 5.6. Center for Quantitative Genetics and Genomics, Aarhus University.
+- Mollandin, F. et al. (2022). Accounting for overlapping annotations in genomic prediction models of complex traits. *BMC Bioinformatics* 23, 365. doi:10.1186/s12859-022-04914-5
+- Moser, G. et al. (2015). Simultaneous discovery, estimation and prediction analysis of complex traits using a Bayesian mixture model. *PLoS Genetics* 11, e1004969. doi:10.1371/journal.pgen.1004969
 - Schneider et al. (2025). *Journal of Dairy Science* 108, 12519-12530. Methane in Danish Holstein.
 - Tavernier et al. (2024). *Journal of Dairy Science* 107, 2231-2240. Genetic parameters of NUE.
 - Vitezica, Z.G. et al. (2011). Compatibility of G and A. *Genetics Research* 93, 357-366.

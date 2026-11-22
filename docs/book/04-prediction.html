@@ -281,7 +281,7 @@ ul.task-list li input[type="checkbox"] {
 
 
 <div class="lead">
-<p><code>02_genomic_prediction.Rmd</code> compares eight evaluation models for NUE, milk urea, Saved Feed and methane, to choose the model on evidence and to measure how well a low-heritability trait like NUE can be predicted.</p>
+<p><code>02_genomic_prediction.Rmd</code> compares thirteen evaluation models for NUE, milk urea, Saved Feed and methane, to choose the model on evidence and to measure how well a low-heritability trait like NUE can be predicted.</p>
 </div>
 <section id="the-models" class="level2" data-number="4.1">
 <h2 data-number="4.1" class="anchored" data-anchor-id="the-models"><span class="header-section-number">4.1</span> The models</h2>
@@ -323,10 +323,32 @@ ul.task-list li input[type="checkbox"] {
 </tr>
 <tr class="odd">
 <td>BayesA, BayesB</td>
-<td>Allow some SNP to have large effects</td>
+<td>Allow some SNP to have large effects (BGLR)</td>
+</tr>
+<tr class="even">
+<td>BayesR</td>
+<td>SNP effects from a mixture of four normal distributions (zero, small, medium, large); BayesRCO software (Moser et al.&nbsp;2015)</td>
+</tr>
+<tr class="odd">
+<td>BayesRC_GWAS</td>
+<td>BayesR with a separate mixture for a prior SNP set: the 10% of SNPs with the strongest GWAS signal in 1,000 cows that are never used for training or validation (MacLeod et al.&nbsp;2016)</td>
+</tr>
+<tr class="even">
+<td>BayesRC_QTL</td>
+<td>BayesRC with the SNPs nearest to the largest simulated QTL as the prior set. Not possible with real data; an upper bound for what a perfect biological prior could add</td>
+</tr>
+<tr class="odd">
+<td>JWAS_BayesC</td>
+<td>BayesC in JWAS, all breeds pooled (Cheng et al.&nbsp;2018)</td>
+</tr>
+<tr class="even">
+<td>JWAS_MT_breeds</td>
+<td>Multi-trait BayesC in JWAS with Holstein, Red Dairy and Jersey as three correlated traits, so SNP effects can differ between breeds (Cheng et al.&nbsp;2018)</td>
 </tr>
 </tbody>
 </table>
+<p>The five models from BayesR on are fitted to the phenotype corrected for herd x generation means, computed from training cows only. They use only genotyped cows, so they compare with GBLUP and the SNP models, not with single-step. They use their own random-number stream, so adding them leaves the results of the other models unchanged (checked).</p>
+<p>MTG2 (Lee and van der Werf 2016) and DMU (Madsen and Jensen 2024) are prepared in the code but not yet run: both are distributed by their authors as executables, and they are added once the programs are available.</p>
 </section>
 <section id="how-accuracy-was-measured" class="level2" data-number="4.2">
 <h2 data-number="4.2" class="anchored" data-anchor-id="how-accuracy-was-measured"><span class="header-section-number">4.2</span> How accuracy was measured</h2>
@@ -412,6 +434,39 @@ ul.task-list li input[type="checkbox"] {
 <td>0.21</td>
 </tr>
 <tr class="even">
+<td>BayesR</td>
+<td>0.18</td>
+<td>0.18</td>
+<td>0.18</td>
+<td>0.21</td>
+<td>0.13</td>
+<td>0.23</td>
+<td>0.17</td>
+<td>0.19</td>
+</tr>
+<tr class="odd">
+<td>BayesRC_GWAS</td>
+<td>0.18</td>
+<td>0.17</td>
+<td>0.20</td>
+<td>0.23</td>
+<td>0.14</td>
+<td>0.23</td>
+<td>0.14</td>
+<td>0.18</td>
+</tr>
+<tr class="even">
+<td>BayesRC_QTL</td>
+<td>0.18</td>
+<td>0.17</td>
+<td>0.20</td>
+<td>0.24</td>
+<td>0.12</td>
+<td>0.23</td>
+<td>0.17</td>
+<td>0.19</td>
+</tr>
+<tr class="odd">
 <td>GBLUP</td>
 <td>0.19</td>
 <td>0.18</td>
@@ -422,7 +477,29 @@ ul.task-list li input[type="checkbox"] {
 <td>0.18</td>
 <td>0.21</td>
 </tr>
+<tr class="even">
+<td>JWAS_BayesC</td>
+<td>0.19</td>
+<td>0.18</td>
+<td>0.21</td>
+<td>0.24</td>
+<td>0.12</td>
+<td>0.24</td>
+<td>0.19</td>
+<td>0.21</td>
+</tr>
 <tr class="odd">
+<td>JWAS_MT_breeds</td>
+<td>0.21</td>
+<td>0.18</td>
+<td>0.22</td>
+<td>0.26</td>
+<td>0.12</td>
+<td>0.23</td>
+<td>0.16</td>
+<td>0.22</td>
+</tr>
+<tr class="even">
 <td>rrBLUP</td>
 <td>0.19</td>
 <td>0.18</td>
@@ -433,7 +510,7 @@ ul.task-list li input[type="checkbox"] {
 <td>0.18</td>
 <td>0.21</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td>ssGBLUP</td>
 <td>0.21</td>
 <td>0.26</td>
@@ -444,7 +521,7 @@ ul.task-list li input[type="checkbox"] {
 <td>0.24</td>
 <td>0.30</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td>ssGBLUP_MF</td>
 <td>0.21</td>
 <td>0.26</td>
@@ -455,7 +532,7 @@ ul.task-list li input[type="checkbox"] {
 <td>0.24</td>
 <td>0.30</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td>wssGBLUP</td>
 <td>0.11</td>
 <td>0.16</td>
@@ -468,7 +545,13 @@ ul.task-list li input[type="checkbox"] {
 </tr>
 </tbody>
 </table>
-<p>A single-step model was the best or within 0.05 of the best in 10 of 10 trait x validation comparisons. Differences below about 0.05 are within fold-to-fold noise. Weighted single-step gave over-dispersed breeding values.</p>
+<p>A single-step model was the best or within 0.05 of the best in 10 of 10 trait x validation comparisons (the eight shown here plus NUE in the GxE scenario). In the eight comparisons above, a single-step model had the highest within-breed accuracy every time. It is the only family that also uses the records of cows without genotypes. Differences below about 0.05 are within fold-to-fold noise: the standard deviation of k-fold accuracy across folds was up to 0.07 for GBLUP. Weighted single-step gave over-dispersed breeding values.</p>
+<p>The five extra models did not improve on GBLUP, the model they compare with:</p>
+<ul>
+<li><strong>BayesR, BayesRC and both JWAS models</strong> were within 0.05 of GBLUP in all eight comparisons (differences from -0.048 to +0.030).</li>
+<li><strong>BayesRC_QTL</strong>, with the SNPs next to the largest simulated QTL as the prior set, differed from GBLUP by -0.020 to +0.007. Even a perfect biological prior added nothing here.</li>
+<li><strong>JWAS_MT_breeds</strong>, with breed-specific SNP effects, differed from pooled JWAS BayesC by -0.03 to +0.02, with no consistent direction.</li>
+</ul>
 <p>Full reports: <a href="../reports/02_genomic_prediction_FULL_rg1.00_NUE.html">NUE</a>, <a href="../reports/02_genomic_prediction_FULL_rg1.00_MUN.html">milk urea</a>, <a href="../reports/02_genomic_prediction_FULL_rg1.00_SF.html">Saved Feed</a>, <a href="../reports/02_genomic_prediction_FULL_rg1.00_CH4.html">methane</a>.</p>
 
 

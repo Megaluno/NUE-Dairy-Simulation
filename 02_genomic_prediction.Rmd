@@ -1,6 +1,6 @@
 ---
 title: "02 - Dosage matrix, G/A/H kernels, and cross-validated genomic prediction"
-subtitle: "ABLUP-REML, GBLUP, ssGBLUP, weighted ssGBLUP, rrBLUP, BayesA, BayesB"
+subtitle: "ABLUP-REML, GBLUP, ssGBLUP, weighted ssGBLUP, rrBLUP, BayesA, BayesB; BayesR, BayesRC, JWAS, MTG2 and DMU"
 author: "Prepared by Emmanuel Ismaila for QGG, Aarhus University"
 output:
   html_document:
@@ -19,6 +19,17 @@ params:
   bayes_burn: 1000
   run_vc: true                   # all-trait variance-component check; only needed once per dataset
   seed: 20261101
+  extra_models: false           # true = also fit BayesR, BayesRC (BayesRCO), JWAS, and MTG2 / DMU when their programs are given
+  bayesrco_bin: "/opt/bayesrco/bayesRCO"
+  run_jwas: true                 # false = skip the two JWAS models (BayesR and BayesRC still run)
+  julia_bin: "/opt/julia_env/bin/julia"
+  julia_depot: "/opt/julia_depot"
+  mtg2_bin: ""                   # path to the MTG2 executable; empty = MTG2 not run
+  dmu_dir: ""                    # folder with the DMU executables (dmu1, dmuai, dmu4); empty = DMU not run
+  extra_iter: 10000              # MCMC length for BayesR, BayesRC and JWAS
+  extra_burn: 2000
+  n_gwas: 1000                   # cows of the earliest genotyped generation used only for the BayesRC GWAS prior
+  prior_frac: 0.10               # share of SNPs in the BayesRC prior category
 ---
 
 ```{r setup, include=FALSE}
@@ -50,11 +61,24 @@ Everything here is computed from that simulation; nothing is typed in by hand.
 | rrBLUP | ridge on SNP | **SNP effects** | REML (rrBLUP::mixed.solve) |
 | BayesA | scaled-t SNP effects | **SNP effects** | MCMC (BGLR) |
 | BayesB | point-mass + scaled-t | **SNP effects** | MCMC (BGLR) |
+| BayesR | mixture of four normals (0, 0.0001, 0.001, 0.01 x genetic variance) | **SNP effects** | MCMC (BayesRCO; Moser et al. 2015) |
+| BayesRC_GWAS | BayesR with a separate mixture for a prior SNP category from an independent GWAS | **SNP effects** | MCMC (BayesRCO; MacLeod et al. 2016) |
+| BayesRC_QTL | BayesR with a prior category of SNPs next to the largest simulated QTL (best case) | **SNP effects** | MCMC (BayesRCO) |
+| JWAS_BayesC | point-mass + normal, pooled over breeds | **SNP effects** | MCMC (JWAS, Julia) |
+| JWAS_MT_breeds | multi-trait BayesC, each breed a correlated trait | **breed-specific SNP effects** | MCMC (JWAS, Julia) |
+| MTG2_GBLUP, MTG2_MT_breeds | VanRaden G; pooled, and each breed a correlated trait | genomic relationships | REML (MTG2) |
+| DMU_GBLUP, DMU_MT_breeds | VanRaden G; pooled, and each breed a correlated trait | genomic relationships | AI-REML (DMU) |
 
 Fixed effects in every model: **breed** (factor) + **herd x generation** (block; herd effects
 were redrawn every generation in file 01, and herds are nested in country). The
 herds are single-breed (CFIT farms, file 00), so herd x generation also identifies the breed; the
 breed term is then dropped as redundant (same fit, full-rank design).
+
+The extra models (BayesR, BayesRC, JWAS, MTG2, DMU; `extra_models = true`) are fitted to the phenotype
+corrected for herd x generation with the training cows only (`y - mean(y)` within herd x generation),
+because BayesRCO has no fixed effects; the same corrected phenotype is used for all of them, so they
+are compared on equal terms. "Breeds as traits" models treat the phenotype of HOL, RDC and JER cows as
+three genetically correlated traits, so SNP effects may differ between breeds.
 
 # Load simulation output
 
@@ -107,9 +131,19 @@ Three codings are used below, and they are algebraically equivalent for predicti
 # and drop the last-generation population that this file does not use. Same cows, same order as before.
 st$pop <- NULL
 gid <- as.character(geno_ids)
-all_cows <- do.call(c, unname(lapply(st$kept_cows, function(p) p[p@id %in% gid])))
+# Extra models: an independent sample of the earliest genotyped generation, used only for the GWAS that
+# defines the BayesRC prior category. Its own random stream leaves every other sample unchanged.
+gwas_ids <- character(0)
+if (params$extra_models) {
+  rs_main <- get(".Random.seed", envir = globalenv()); set.seed(params$seed + 99)
+  pool <- phen[generation == min(gens) & !(id %in% c(geno_ids, nongeno_ids)), id]
+  gwas_ids <- as.character(pool[sample.int(length(pool), min(length(pool), params$n_gwas))])
+  assign(".Random.seed", rs_main, envir = globalenv())
+}
+all_cows <- do.call(c, unname(lapply(st$kept_cows, function(p) p[p@id %in% c(gid, gwas_ids)])))
 st$kept_cows <- NULL; invisible(gc())
 gpop <- all_cows[match(gid, all_cows@id)]
+Mgwas <- if (length(gwas_ids)) pullSnpGeno(all_cows[match(gwas_ids, all_cows@id)], simParam = SP) else NULL
 rm(all_cows); invisible(gc())
 M <- pullSnpGeno(gpop, simParam = SP)
 rownames(M) <- gpop@id
@@ -121,6 +155,7 @@ maf <- pmin(p, 1 - p)
 keep <- maf >= 0.01                                    # QC: MAF >= 1%
 cat("SNP removed for MAF < 0.01:", sum(!keep), "\n")
 M <- M[, keep]; p <- p[keep]
+if (!is.null(Mgwas)) Mgwas <- Mgwas[, keep]
 W <- M - 1
 Z <- sweep(M, 2, 2 * p)
 stopifnot(max(abs(colMeans(Z))) < 1e-10)              # centring check
@@ -477,6 +512,172 @@ for (tr in traits) dat[, paste0("ys_", tr) := get(tr) - mean(get(tr)), by = hg]
 
 ```
 
+# Extra models: BayesR, BayesRC, JWAS, MTG2 and DMU
+
+These models run outside R (Fortran, Julia and stand-alone programs). R writes their input files, starts
+them, and reads their predictions back; the Julia code is shown in its own chunk below. They use the same
+cows, folds and forward-validation set as every model above.
+
+* **BayesR** (Moser et al. 2015) and **BayesRC** (MacLeod et al. 2016) are fitted with BayesRCO (Mollandin et al. 2022),
+  which is built on the original bayesR Fortran code. BayesRC uses two disjoint SNP categories, for which BayesRCO's
+  BayesRC-pi model is BayesRC.
+* **BayesRC prior categories.** `BayesRC_GWAS`: the `r 100 * params$prior_frac`% of SNPs with the largest single-SNP
+  GWAS t-statistic in `r params$n_gwas` cows of the earliest genotyped generation that are in neither the training nor the
+  validation set (realistic). `BayesRC_QTL`: the SNPs nearest to the simulated QTL with the largest effects (best case,
+  not available in real data; an upper bound for what a perfect biological prior could add).
+* **JWAS** (Cheng et al. 2018): BayesC pooled over breeds, and multi-trait BayesC with HOL, RDC and JER as three traits.
+  Each cow has a record for one breed only, so residual covariances between the breed traits are fixed at zero
+  (`constraint = true`).
+* **MTG2** (Lee & van der Werf 2016) and **DMU** (Madsen & Jensen): GBLUP-REML, pooled and with breeds as traits; run only
+  when their executables are given in `mtg2_bin` and `dmu_dir`.
+
+```{r extra_setup, eval = params$extra_models}
+xdir <- file.path(params$sim_dir, "extra_models"); dir.create(xdir, showWarnings = FALSE)
+rs_main <- get(".Random.seed", envir = globalenv())   # the extra models must not shift the random stream of the others
+snp_ids <- colnames(M); if (is.null(snp_ids)) snp_ids <- paste0("SNP", seq_len(ncol(M)))
+smap <- as.data.table(getSnpMap(simParam = SP))[keep]
+
+# PLINK .bed writer (SNP-major; codes 0 = hom. first allele, 2 = het., 3 = hom. second allele; dosage = copies of allele 2)
+write_plink <- function(Mx, prefix, pheno) {
+  n <- nrow(Mx); code <- matrix(c(0L, 2L, 3L)[t(Mx) + 1L], nrow = ncol(Mx))
+  pad <- (4 - n %% 4) %% 4; if (pad) code <- cbind(code, matrix(0L, nrow(code), pad))
+  q <- ncol(code) / 4; idx <- seq(1, ncol(code), by = 4)
+  bytes <- code[, idx] + 4L * code[, idx + 1L] + 16L * code[, idx + 2L] + 64L * code[, idx + 3L]
+  con <- file(paste0(prefix, ".bed"), "wb"); writeBin(as.raw(c(0x6c, 0x1b, 0x01)), con)
+  writeBin(as.raw(as.vector(t(matrix(bytes, ncol = q)))), con); close(con)
+  fwrite(data.table(smap$chr, snp_ids, 0, smap$site, "A", "B"), paste0(prefix, ".bim"), sep = "\t", col.names = FALSE)
+  # phenotype written without padding: BayesRCO splits .fam lines on single spaces
+  fwrite(data.table(rownames(Mx), rownames(Mx), 0, 0, 0, ifelse(is.na(pheno), "NA", sprintf("%.10g", pheno))),
+         paste0(prefix, ".fam"), sep = " ", col.names = FALSE, quote = FALSE)
+}
+
+# phenotype corrected for herd x generation with TRAINING cows only
+y_corr <- function(dtr, tr) { d <- copy(dtr)[, yc := get(tr) - mean(get(tr)), by = hg]; setNames(d$yc, as.character(d$id)) }
+
+# BayesRC prior categories (two disjoint columns: rest, prior set)
+n_prior <- round(params$prior_frac * ncol(M))
+cat_gwas <- cat_qtl <- list()
+for (tr in params$focus_traits) {
+  # (a) GWAS in the independent sample: single-SNP regression of the herd x generation-corrected phenotype
+  pg <- phen[match(as.integer(gwas_ids), id)]
+  yg <- pg[[tr]] - ave(pg[[tr]], pg$herd, pg$generation)
+  Xs <- scale(Mgwas); ok <- is.finite(colSums(Xs)); Xs[, !ok] <- 0
+  r <- as.vector(crossprod(Xs, yg - mean(yg))) / ((length(yg) - 1) * sd(yg))
+  tstat <- abs(r) * sqrt((length(yg) - 2) / pmax(1 - r^2, 1e-12))
+  cat_gwas[[tr]] <- rank(-tstat, ties.method = "first") <= n_prior
+  # (b) SNPs nearest to the simulated QTL with the largest absolute effects (best case)
+  k <- match(tr, SP$traitNames); qm <- as.data.table(getQtlMap(trait = k, simParam = SP))
+  qm[, eff := abs(SP$traits[[k]]@addEff)]
+  top <- qm[order(-eff)][seq_len(ceiling(n_prior / 10))]
+  near <- unique(unlist(lapply(seq_len(nrow(top)), function(i) {
+    cand <- which(smap$chr == top$chr[i]); cand[order(abs(smap$pos[cand] - top$pos[i]))][1:10] })))
+  cat_qtl[[tr]] <- seq_len(ncol(M)) %in% near
+}
+write_cat <- function(v, f) fwrite(data.table(as.integer(!v), as.integer(v)), f, sep = " ", col.names = FALSE)
+
+run_bayesrco <- function(tag, yv, catv = NULL) {          # yv: corrected phenotype of training cows, named by id
+  pre <- file.path(xdir, tag); ph <- unname(yv[gid])     # NA for validation and other cows
+  write_plink(M, pre, ph)
+  a <- c("-bfile", pre, "-out", pre, "-numit", params$extra_iter, "-burnin", params$extra_burn, "-thin", 10,
+         "-seed", params$seed %% 100000, "-permute")
+  # BayesRCO always needs a category file: BayesR = one category holding every SNP; BayesRC = two disjoint categories
+  nc <- if (is.null(catv)) 1L else 2L
+  if (is.null(catv)) fwrite(data.table(rep(1L, ncol(M))), paste0(pre, ".cat"), col.names = FALSE) else write_cat(catv, paste0(pre, ".cat"))
+  a <- c(a, "-ncat", nc, "-catfile", paste0(pre, ".cat"))
+  system2(params$bayesrco_bin, a, stdout = paste0(pre, ".stdout"), stderr = paste0(pre, ".stderr"))
+  p2 <- c("-bfile", pre, "-predict", "-out", paste0(pre, "_pred"), "-model", paste0(pre, ".model"),
+          "-freq", paste0(pre, ".frq"), "-param", paste0(pre, ".param"))
+  p2 <- c(p2, "-ncat", nc, "-catfile", paste0(pre, ".cat"))
+  system2(params$bayesrco_bin, p2, stdout = paste0(pre, "_pred.stdout"), stderr = paste0(pre, "_pred.stderr"))
+  gv <- scan(paste0(pre, "_pred.gv"), quiet = TRUE); stopifnot(length(gv) == length(gid))
+  setNames(gv, gid)
+}
+
+# JWAS input: genotypes once; phenotypes per trait and scheme
+fwrite(data.table(ID = gid, M), file.path(xdir, "jwas_geno.csv"))
+breed_of <- setNames(as.character(dat$breed), dat$id)
+```
+
+```{cat, engine.opts = list(file = file.path(params$sim_dir, "extra_models", "jwas_run.jl")), eval = params$extra_models && params$run_jwas}
+# JWAS: pooled BayesC and multi-trait BayesC with breeds as traits
+# usage: julia jwas_run.jl <folder> <trait> <scheme1,scheme2,...> <chain length> <burn-in> <seed>
+using JWAS, CSV, DataFrames
+xdir, trait = ARGS[1], ARGS[2]
+schemes = split(ARGS[3], ",")
+niter, nburn, seed = parse(Int, ARGS[4]), parse(Int, ARGS[5]), parse(Int, ARGS[6])
+for sc in schemes
+    phen = CSV.read(joinpath(xdir, "jwas_pheno_$(trait)_$(sc).csv"), DataFrame; missingstring = "NA")
+    phen.ID = string.(phen.ID)
+    # pooled BayesC
+    global geno = get_genotypes(joinpath(xdir, "jwas_geno.csv"), separator = ',', method = "BayesC",
+                                quality_control = false)
+    m1 = build_model("y = intercept + geno")
+    o1 = runMCMC(m1, phen[:, [:ID, :y]], chain_length = niter, burnin = nburn, seed = seed,
+                 output_folder = joinpath(xdir, "jwas_$(trait)_$(sc)_pooled"), printout_model_info = false)
+    CSV.write(joinpath(xdir, "jwas_ebv_$(trait)_$(sc)_pooled.csv"), o1["EBV_y"])
+    # breeds as three correlated traits; one record per cow, so residual covariances are fixed at zero
+    global geno3 = get_genotypes(joinpath(xdir, "jwas_geno.csv"), separator = ',', method = "BayesC",
+                                 quality_control = false)
+    m3 = build_model("y_HOL = intercept + geno3\n y_RDC = intercept + geno3\n y_JER = intercept + geno3";
+                     constraint = true)
+    o3 = runMCMC(m3, phen[:, [:ID, :y_HOL, :y_RDC, :y_JER]], chain_length = niter, burnin = nburn, seed = seed,
+                 output_folder = joinpath(xdir, "jwas_$(trait)_$(sc)_breeds"), printout_model_info = false)
+    for b in ("HOL", "RDC", "JER")
+        CSV.write(joinpath(xdir, "jwas_ebv_$(trait)_$(sc)_breed_$(b).csv"), o3["EBV_y_$(b)"])
+    end
+    # the per-iteration sample files (about 250 MB per fit) are not used: posterior means are saved above
+    for d in ("pooled", "breeds"), f in readdir(joinpath(xdir, "jwas_$(trait)_$(sc)_$(d)"); join = true)
+        startswith(basename(f), "MCMC_samples_") && rm(f)
+    end
+end
+```
+
+```{r extra_run, eval = params$extra_models}
+extra_ebv <- list(); extra_sec <- list()
+for (tr in params$focus_traits) {
+  for (sc in names(schemes)) {
+    dtr <- copy(dat)[!(id %in% schemes[[sc]]) & genotyped == TRUE]
+    yv <- y_corr(dtr, tr); key <- paste(tr, sc)
+    e <- list()
+    # run time per fit (training + prediction) is kept for the results table
+    extra_sec[[key]] <- list()
+    extra_sec[[key]]$BayesR <- system.time(e$BayesR <- run_bayesrco(paste0("bayesR_", tr, "_", sc), yv))[["elapsed"]]
+    extra_sec[[key]]$BayesRC_GWAS <- system.time(e$BayesRC_GWAS <- run_bayesrco(paste0("bayesRC_gwas_", tr, "_", sc), yv, cat_gwas[[tr]]))[["elapsed"]]
+    extra_sec[[key]]$BayesRC_QTL  <- system.time(e$BayesRC_QTL  <- run_bayesrco(paste0("bayesRC_qtl_", tr, "_", sc), yv, cat_qtl[[tr]]))[["elapsed"]]
+    # JWAS phenotype file: pooled y and one column per breed (NA for other breeds and for non-training cows)
+    jp <- data.table(ID = gid, y = unname(yv[gid]), b = breed_of[gid])
+    for (bb in c("HOL", "RDC", "JER")) jp[, paste0("y_", bb) := ifelse(b == bb, y, NA_real_)]
+    fwrite(jp[, .(ID, y, y_HOL, y_RDC, y_JER)], file.path(xdir, sprintf("jwas_pheno_%s_%s.csv", tr, sc)), na = "NA")
+    extra_ebv[[key]] <- e
+    progress("extra models (BayesRCO) ", tr, " ", sc, " done")
+  }
+  if (!params$run_jwas) next
+  # one Julia session per trait (package loading is the slow part)
+  tm <- system.time(system2(params$julia_bin, c(file.path(xdir, "jwas_run.jl"), xdir, tr, paste(names(schemes), collapse = ","),
+                            params$extra_iter, params$extra_burn, params$seed %% 100000),
+                    env = paste0("JULIA_DEPOT_PATH=", params$julia_depot),
+                    stdout = file.path(xdir, paste0("jwas_", tr, ".log")), stderr = file.path(xdir, paste0("jwas_", tr, ".err"))))[["elapsed"]]
+  for (sc in names(schemes)) {
+    key <- paste(tr, sc)
+    j1 <- fread(file.path(xdir, sprintf("jwas_ebv_%s_%s_pooled.csv", tr, sc)))
+    extra_ebv[[key]]$JWAS_BayesC <- setNames(j1$EBV, as.character(j1$ID))[gid]
+    jb <- rbindlist(lapply(c("HOL", "RDC", "JER"), function(b)
+      fread(file.path(xdir, sprintf("jwas_ebv_%s_%s_breed_%s.csv", tr, sc, b)))[, .(ID = as.character(ID), EBV, b = b)]))
+    jb <- jb[b == breed_of[ID]]                               # each cow takes the EBV for her own breed
+    extra_ebv[[key]]$JWAS_MT_breeds <- setNames(jb$EBV, jb$ID)[gid]
+  }
+  # one Julia call fits both JWAS models for every scheme, so only the total time is known
+  progress("extra models (JWAS) ", tr, " done in ", round(tm), " s for both models and all schemes")
+}
+if (nzchar(params$mtg2_bin) || nzchar(params$dmu_dir))
+  progress("MTG2 / DMU requested: their runs are added when the executables and input formats are verified")
+assign(".Random.seed", rs_main, envir = globalenv())
+kable(data.table(trait = params$focus_traits,
+                 SNPs_in_GWAS_category = sapply(cat_gwas, sum), SNPs_in_QTL_category = sapply(cat_qtl, sum),
+                 overlap = sapply(params$focus_traits, function(tr) sum(cat_gwas[[tr]] & cat_qtl[[tr]]))),
+      caption = "BayesRC prior categories (number of SNPs)")
+```
+
 ```{r cv_run}
 score <- function(ebv, val, tr) {
   v <- dat[id %in% val]
@@ -530,6 +731,8 @@ for (tr in params$focus_traits) for (sc in names(schemes)) {
     f <- fit_bglr(gtr, tr, m)
     out[[m]] <- setNames(as.vector(W %*% f$u), gid)
   }
+  if (params$extra_models) for (m in names(extra_ebv[[paste(tr, sc)]])) {
+    out[[m]] <- extra_ebv[[paste(tr, sc)]][[m]]; secs[[m]] <- extra_sec[[paste(tr, sc)]][[m]] }
   if (sc == "forward") {                            # keep forward EBVs for inspection
     v <- dat[id %in% val, c("id", "breed", paste0("TBV_", tr)), with = FALSE]
     setnames(v, 3, "TBV")

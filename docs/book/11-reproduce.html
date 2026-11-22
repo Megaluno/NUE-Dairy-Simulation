@@ -322,6 +322,12 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <section id="requirements" class="level2" data-number="11.1">
 <h2 data-number="11.1" class="anchored" data-anchor-id="requirements"><span class="header-section-number">11.1</span> Requirements</h2>
 <p>R 4.3 or later with <code>AlphaSimR</code>, <code>sommer</code>, <code>BGLR</code>, <code>rrBLUP</code>, <code>nadiv</code>, <code>data.table</code>, <code>ggplot2</code>, <code>knitr</code> and <code>rmarkdown</code>. The script <code>hpc/install_packages.R</code> installs them.</p>
+<p>The extra genomic prediction models of Step 2 (<code>extra_models = true</code>) also need:</p>
+<ul>
+<li><strong>BayesRCO</strong> for BayesR and BayesRC: compiled from source with <code>gfortran</code>.</li>
+<li><strong>Julia 1.10</strong> with <strong>JWAS 2.4.0</strong>. The exact package versions are in <code>tools/julia_env/</code>. Distributions is pinned to 0.25.80, because JWAS 2.4.0 allows StatsBase only up to 0.33 and later Distributions releases do not work with it.</li>
+</ul>
+<p><code>tools/install_extra_models.sh</code> installs both. MTG2 and DMU are distributed by their authors as executables (<a href="https://sites.google.com/site/honglee0707/mtg2">MTG2</a>, <a href="https://dmu.ghpc.au.dk/dmu/">DMU</a>); DMU is free for research, while commercial use such as routine evaluation needs terms from QGG.</p>
 </section>
 <section id="run-it" class="level2" data-number="11.2">
 <h2 data-number="11.2" class="anchored" data-anchor-id="run-it"><span class="header-section-number">11.2</span> Run it</h2>
@@ -332,8 +338,11 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="co"># The full run reported here (144 steps, resumable; each finished step leaves logs/&lt;step&gt;.done)</span></span>
 <span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="ex">./queue.sh</span> queue_full_run.txt</span>
 <span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="co"># Rebuild the spreadsheet of replicate results</span></span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="ex">python3</span> tools/build_xlsx.py</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="co"># Step 2 again with the extra models (BayesR, BayesRC, JWAS) for the four traits</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="ex">./queue.sh</span> queue_extra_models.txt</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="co"># Rebuild the spreadsheet of replicate results</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="ex">python3</span> tools/build_xlsx.py</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="callout callout-style-default callout-note callout-titled">
 <div class="callout-header d-flex align-content-center">
 <div class="callout-icon-container">

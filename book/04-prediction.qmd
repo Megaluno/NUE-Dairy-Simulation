@@ -1,7 +1,7 @@
 # Step 2: genomic prediction {#sec-prediction}
 
 ::: {.lead}
-`02_genomic_prediction.Rmd` compares eight evaluation models for NUE, milk urea, Saved Feed and methane, to choose the model on evidence and to measure how well a low-heritability trait like NUE can be predicted.
+`02_genomic_prediction.Rmd` compares thirteen evaluation models for NUE, milk urea, Saved Feed and methane, to choose the model on evidence and to measure how well a low-heritability trait like NUE can be predicted.
 :::
 
 ## The models
@@ -14,7 +14,16 @@
 | ssGBLUP_MF | Single-step with breed metafounders |
 | wssGBLUP | Weighted single-step |
 | rrBLUP | Ridge regression on SNP effects |
-| BayesA, BayesB | Allow some SNP to have large effects |
+| BayesA, BayesB | Allow some SNP to have large effects (BGLR) |
+| BayesR | SNP effects from a mixture of four normal distributions (zero, small, medium, large); BayesRCO software (Moser et al. 2015) |
+| BayesRC_GWAS | BayesR with a separate mixture for a prior SNP set: the 10% of SNPs with the strongest GWAS signal in 1,000 cows that are never used for training or validation (MacLeod et al. 2016) |
+| BayesRC_QTL | BayesRC with the SNPs nearest to the largest simulated QTL as the prior set. Not possible with real data; an upper bound for what a perfect biological prior could add |
+| JWAS_BayesC | BayesC in JWAS, all breeds pooled (Cheng et al. 2018) |
+| JWAS_MT_breeds | Multi-trait BayesC in JWAS with Holstein, Red Dairy and Jersey as three correlated traits, so SNP effects can differ between breeds (Cheng et al. 2018) |
+
+The five models from BayesR on are fitted to the phenotype corrected for herd x generation means, computed from training cows only. They use only genotyped cows, so they compare with GBLUP and the SNP models, not with single-step. They use their own random-number stream, so adding them leaves the results of the other models unchanged (checked).
+
+MTG2 (Lee and van der Werf 2016) and DMU (Madsen and Jensen 2024) are prepared in the code but not yet run: both are distributed by their authors as executables, and they are added once the programs are available.
 
 ## How accuracy was measured
 
@@ -33,6 +42,12 @@ Mean within-breed accuracy of each model (forward and k-fold validation):
 
 {{< include _includes/cv_accuracy.md >}}
 
-A single-step model was the best or within 0.05 of the best in 10 of 10 trait x validation comparisons. Differences below about 0.05 are within fold-to-fold noise. Weighted single-step gave over-dispersed breeding values.
+A single-step model was the best or within 0.05 of the best in 10 of 10 trait x validation comparisons (the eight shown here plus NUE in the GxE scenario). In the eight comparisons above, a single-step model had the highest within-breed accuracy every time. It is the only family that also uses the records of cows without genotypes. Differences below about 0.05 are within fold-to-fold noise: the standard deviation of k-fold accuracy across folds was up to 0.07 for GBLUP. Weighted single-step gave over-dispersed breeding values.
+
+The five extra models did not improve on GBLUP, the model they compare with:
+
+- **BayesR, BayesRC and both JWAS models** were within 0.05 of GBLUP in all eight comparisons (differences from -0.048 to +0.030).
+- **BayesRC_QTL**, with the SNPs next to the largest simulated QTL as the prior set, differed from GBLUP by -0.020 to +0.007. Even a perfect biological prior added nothing here.
+- **JWAS_MT_breeds**, with breed-specific SNP effects, differed from pooled JWAS BayesC by -0.03 to +0.02, with no consistent direction.
 
 Full reports: [NUE](../reports/02_genomic_prediction_FULL_rg1.00_NUE.html), [milk urea](../reports/02_genomic_prediction_FULL_rg1.00_MUN.html), [Saved Feed](../reports/02_genomic_prediction_FULL_rg1.00_SF.html), [methane](../reports/02_genomic_prediction_FULL_rg1.00_CH4.html).

@@ -113,7 +113,7 @@ cv <- cv[model != "GBLUP_snp"]
 cvs <- cv[, .(acc_wb = mean(acc_within_breed), acc = mean(acc_TBV), slope = mean(slope)),
           by = .(trait, model, scheme = ifelse(scheme == "forward", "forward", "k-fold"))]
 kable(dcast(cvs, model ~ trait + scheme, value.var = "acc_wb"), digits = 3,
-      caption = "Within-breed accuracy = cor(EBV, true BV) within breed, n-weighted mean (the accuracy that matters for selection)")
+      caption = "Within-breed accuracy = cor(EBV, true BV) within breed, n-weighted mean (the accuracy that matters for selection). NA: BayesR, BayesRC and the JWAS models were run in the main scenario only, not in the NUE_rg0.9 scenario")
 kable(dcast(cvs, model ~ trait + scheme, value.var = "acc"), digits = 3,
       caption = "Pooled accuracy across the three breeds (sensitive to breed-level EBV offsets; for transparency)")
 ggplot(cv[scheme != "forward"], aes(model, acc_within_breed, fill = model)) +
@@ -125,7 +125,8 @@ best <- cvs[!is.na(acc_wb), .SD[which.max(acc_wb)], by = .(trait, scheme)]
 ```{r cv_dispersion}
 # forward validation (youngest, unrecorded generation): EBVs saved by file 02
 ef <- rbindlist(lapply(traits_cv, function(t) rd(sprintf("ebv_forward_%s.csv", t))), fill = TRUE)
-mods <- intersect(c("ABLUP", "GBLUP", "ssGBLUP", "ssGBLUP_MF", "wssGBLUP", "rrBLUP", "BayesA", "BayesB"), names(ef))
+mods <- intersect(c("ABLUP", "GBLUP", "ssGBLUP", "ssGBLUP_MF", "wssGBLUP", "rrBLUP", "BayesA", "BayesB",
+                    "BayesR", "BayesRC_GWAS", "BayesRC_QTL", "JWAS_BayesC", "JWAS_MT_breeds"), names(ef))
 el <- melt(ef, id.vars = c("trait", "id", "breed", "TBV"), measure.vars = mods,
            variable.name = "model", value.name = "EBV")
 el[, `:=`(tc = TBV - mean(TBV), ec = EBV - mean(EBV)), by = .(trait, model, breed)]

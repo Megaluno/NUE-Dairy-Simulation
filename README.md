@@ -51,7 +51,7 @@ Full tables: [`reports/05_summary.html`](reports/05_summary.html) (download and 
 ```mermaid
 flowchart TD
     A["Step 0<br/>Genetic parameters<br/>and NTM breeding goal"] --> B["Step 1<br/>Founder genomes (coalescent)<br/>and 10-generation burn-in"]
-    B --> C["Step 2<br/>Genomic prediction<br/>8 models, cross-validation"]
+    B --> C["Step 2<br/>Genomic prediction<br/>13 models, cross-validation"]
     B --> D["Step 3<br/>Multi-trait models<br/>and GxE between countries"]
     B --> E["Step 4<br/>Breeding programme<br/>8 scenarios x 10 generations"]
     A --> E
@@ -68,7 +68,7 @@ flowchart TD
 | Traits (11) | Milk, protein and fat yield; Saved Feed; somatic cell score; resilience (LnVar); calving interval; longevity; milk urea nitrogen; NUE; methane |
 | Genome | 29 chromosomes, 10,005 SNP, 600 founders per breed |
 | Replicates | 10 per main scenario (independent founders), 5 per sensitivity set |
-| Software | R 4.3.3, AlphaSimR 2.1.0, sommer 4.5.12, BGLR 1.1.4, rrBLUP 4.6.3, nadiv 2.18.0 |
+| Software | R 4.3.3, AlphaSimR 2.1.0, sommer 4.5.12, BGLR 1.1.4, rrBLUP 4.6.3, nadiv 2.18.0; BayesRCO (commit f618a51), Julia 1.10.4, JWAS 2.4.0 |
 
 ## Step by step
 
@@ -108,7 +108,7 @@ Each step is one R Markdown file and a self-contained HTML report (in [`reports/
 
 ### Step 2: genomic prediction (`02_genomic_prediction.Rmd`)
 
-**What it does.** Compares eight evaluation models for NUE, MUN, Saved Feed and CH4: pedigree BLUP, GBLUP, single-step GBLUP (pooled, and with breed metafounders), weighted single-step, rrBLUP, BayesA and BayesB.
+**What it does.** Compares thirteen evaluation models for NUE, MUN, Saved Feed and CH4: pedigree BLUP, GBLUP, single-step GBLUP (pooled, and with breed metafounders), weighted single-step, rrBLUP, BayesA and BayesB, and with `extra_models = true` also BayesR, BayesRC (two prior SNP sets), and JWAS BayesC pooled and with the three breeds as correlated traits. MTG2 and DMU are prepared in the code and run once their executables are given.
 
 **Why.** To choose the evaluation model on evidence, and to measure how accurately a low-heritability trait such as NUE can be predicted.
 
@@ -116,9 +116,10 @@ Each step is one R Markdown file and a self-contained HTML report (in [`reports/
 
 - **Validation**: 3-fold cross-validation plus forward validation (youngest cows predicted from older ones). Accuracy is the correlation of EBV with the true breeding value, which a simulation knows.
 - **Within-breed accuracy** is reported, because selection is within breed and pooled accuracy is distorted by breed means.
+- **Extra models**: BayesR and BayesRC are fitted with BayesRCO (Mollandin et al. 2022). The BayesRC prior set is either the 10% of SNPs with the strongest GWAS signal in 1,000 cows never used for training or validation (realistic), or the SNPs nearest to the largest simulated QTL (an upper bound, not possible with real data). JWAS (Cheng et al. 2018) fits BayesC pooled and with breeds as traits, so SNP effects can differ between breeds. These models use only genotyped cows and their own random-number stream, so the other models give identical results with or without them (checked).
 - **G and A<sub>22</sub> compatibility**: in a multi-breed population, unadjusted single-step GBLUP produces breed-level offsets in EBVs. The pipeline tests an adjusted G and metafounders (Vitezica et al. 2011; Legarra et al. 2015).
 
-**Finding.** A single-step model was best or within 0.05 of the best in 10 of 10 trait x validation comparisons. Weighted single-step gave over-dispersed EBVs.
+**Finding.** A single-step model was best or within 0.05 of the best in 10 of 10 trait x validation comparisons; in the eight comparisons of the main scenario it had the highest within-breed accuracy every time. BayesR, BayesRC and the JWAS models were within 0.05 of GBLUP in all eight comparisons (differences -0.048 to +0.030), so none of them improved on GBLUP. BayesRC with the SNPs next to the largest simulated QTL as the prior set, a best case not possible with real data, also did not. Weighted single-step gave over-dispersed EBVs.
 
 ### Step 3: multi-trait models and GxE (`03_multitrait_gxe.Rmd`)
 
@@ -222,7 +223,7 @@ The full list of assumptions and the verification log (24 entries of bugs found,
 
 ## How to run
 
-Requirements: R >= 4.3 with `AlphaSimR`, `sommer`, `BGLR`, `rrBLUP`, `nadiv`, `data.table`, `ggplot2`, `knitr`, `rmarkdown` (see `hpc/install_packages.R`).
+Requirements: R >= 4.3 with `AlphaSimR`, `sommer`, `BGLR`, `rrBLUP`, `nadiv`, `data.table`, `ggplot2`, `knitr`, `rmarkdown` (see `hpc/install_packages.R`). The extra Step 2 models also need BayesRCO and Julia 1.10 with JWAS 2.4.0; `tools/install_extra_models.sh` installs both, with the exact Julia package versions in `tools/julia_env/`.
 
 ```bash
 # Quick check of the whole chain at 5% scale
